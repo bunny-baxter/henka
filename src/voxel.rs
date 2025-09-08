@@ -1,14 +1,19 @@
+use cgmath::{Vector3, vec3};
+
+use crate::array_3d::Array3D;
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
     position: [f32; 3],
-    tex_coords: [f32; 2],
+    color: [f32; 3],
+    uv: [f32; 2],
 }
 
 impl Vertex {
-    const ATTRIBUTES: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
+    const ATTRIBUTES: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
 
-    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+    pub fn buffer_layout() -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
 
         wgpu::VertexBufferLayout {
@@ -19,17 +24,131 @@ impl Vertex {
     }
 }
 
-pub const VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.0868241, 0.49240386, 0.0], tex_coords: [0.4131759, 1.0 - 0.99240386], },
-    Vertex { position: [-0.49513406, 0.06958647, 0.0], tex_coords: [0.0048659444, 1.0 - 0.56958647], },
-    Vertex { position: [-0.21918549, -0.44939706, 0.0], tex_coords: [0.28081453, 1.0 - 0.05060294], },
-    Vertex { position: [0.35966998, -0.3473291, 0.0], tex_coords: [0.85967, 1.0 - 0.1526709], },
-    Vertex { position: [0.44147372, 0.2347359, 0.0], tex_coords: [0.9414737, 1.0 - 0.7347359], },
-];
+struct CubeFaceDescription {
+    render_posx_face: bool,
+    render_negx_face: bool,
+    render_posy_face: bool,
+    render_negy_face: bool,
+    render_posz_face: bool,
+    render_negz_face: bool,
+}
 
-pub const INDICES: &[u16] = &[
-    0, 1, 4,
-    1, 2, 4,
-    2, 3, 4,
-];
+fn create_cube_mesh(offset: Vector3<f32>, size: Vector3<f32>, face_description: CubeFaceDescription) -> Vec<Vertex> {
+    //      +Y
+    //       |
+    //       2 -------- 6
+    //      /|         /|
+    //     / |        / |
+    //    4 -------- 7  |
+    //    |  |       |  |
+    //    |  0 ------|- 3 --- +X
+    //    | /        | /
+    //    |/         |/
+    //    1 -------- 5
+    //   /
+    // +Z
+    let positions = [
+        [offset.x, offset.y, offset.z],
+        [offset.x, offset.y, offset.z + size.z],
+        [offset.x, offset.y + size.y, offset.z],
+        [offset.x + size.x, offset.y, offset.z],
+        [offset.x, offset.y + size.y, offset.z + size.z],
+        [offset.x + size.x, offset.y, offset.z + size.z],
+        [offset.x + size.x, offset.y + size.y, offset.z],
+        [offset.x + size.x, offset.y + size.y, offset.z + size.z],
+    ];
+    let mut verts = vec![];
+    if face_description.render_negx_face {
+        verts.push(Vertex { position: positions[0], color: [1.0, 0.0, 0.0], uv: [0.0, 1.0] });
+        verts.push(Vertex { position: positions[1], color: [1.0, 0.0, 0.0], uv: [1.0, 1.0] });
+        verts.push(Vertex { position: positions[4], color: [1.0, 0.0, 0.0], uv: [1.0, 0.0] });
+        verts.push(Vertex { position: positions[0], color: [1.0, 0.0, 0.0], uv: [0.0, 1.0] });
+        verts.push(Vertex { position: positions[4], color: [1.0, 0.0, 0.0], uv: [1.0, 0.0] });
+        verts.push(Vertex { position: positions[2], color: [1.0, 0.0, 0.0], uv: [0.0, 0.0] });
+        //for _i in range(6):
+        //    normals.append(Vector3(-1.0, 0.0, 0.0))
+    }
+    if face_description.render_negy_face {
+        verts.push(Vertex { position: positions[0], color: [0.0, 1.0, 0.0], uv: [0.0, 1.0] });
+        verts.push(Vertex { position: positions[5], color: [0.0, 1.0, 0.0], uv: [1.0, 0.0] });
+        verts.push(Vertex { position: positions[1], color: [0.0, 1.0, 0.0], uv: [0.0, 0.0] });
+        verts.push(Vertex { position: positions[0], color: [0.0, 1.0, 0.0], uv: [0.0, 1.0] });
+        verts.push(Vertex { position: positions[3], color: [0.0, 1.0, 0.0], uv: [1.0, 1.0] });
+        verts.push(Vertex { position: positions[5], color: [0.0, 1.0, 0.0], uv: [1.0, 0.0] });
+        //for _i in range(6):
+        //    normals.append(Vector3(0.0, -1.0, 0.0))
+    }
+    if face_description.render_negz_face {
+        verts.push(Vertex { position: positions[0], color: [0.0, 0.0, 1.0], uv: [1.0, 1.0] });
+        verts.push(Vertex { position: positions[6], color: [0.0, 0.0, 1.0], uv: [0.0, 0.0] });
+        verts.push(Vertex { position: positions[3], color: [0.0, 0.0, 1.0], uv: [0.0, 1.0] });
+        verts.push(Vertex { position: positions[0], color: [0.0, 0.0, 1.0], uv: [1.0, 1.0] });
+        verts.push(Vertex { position: positions[2], color: [0.0, 0.0, 1.0], uv: [1.0, 0.0] });
+        verts.push(Vertex { position: positions[6], color: [0.0, 0.0, 1.0], uv: [0.0, 0.0] });
+        //for _i in range(6):
+        //    normals.append(Vector3(0.0, 0.0, -1.0))
+    }
+    if face_description.render_posx_face {
+        verts.push(Vertex { position: positions[7], color: [1.0, 0.0, 0.0], uv: [0.0, 0.0] });
+        verts.push(Vertex { position: positions[3], color: [1.0, 0.0, 0.0], uv: [1.0, 1.0] });
+        verts.push(Vertex { position: positions[6], color: [1.0, 0.0, 0.0], uv: [1.0, 0.0] });
+        verts.push(Vertex { position: positions[7], color: [1.0, 0.0, 0.0], uv: [0.0, 0.0] });
+        verts.push(Vertex { position: positions[5], color: [1.0, 0.0, 0.0], uv: [0.0, 1.0] });
+        verts.push(Vertex { position: positions[3], color: [1.0, 0.0, 0.0], uv: [1.0, 1.0] });
+        //for _i in range(6):
+        //    normals.append(Vector3(1.0, 0.0, 0.0))
+    }
+    if face_description.render_posy_face {
+        verts.push(Vertex { position: positions[7], color: [0.0, 1.0, 0.0], uv: [1.0, 1.0] });
+        verts.push(Vertex { position: positions[6], color: [0.0, 1.0, 0.0], uv: [1.0, 0.0] });
+        verts.push(Vertex { position: positions[2], color: [0.0, 1.0, 0.0], uv: [0.0, 0.0] });
+        verts.push(Vertex { position: positions[7], color: [0.0, 1.0, 0.0], uv: [1.0, 1.0] });
+        verts.push(Vertex { position: positions[2], color: [0.0, 1.0, 0.0], uv: [0.0, 0.0] });
+        verts.push(Vertex { position: positions[4], color: [0.0, 1.0, 0.0], uv: [0.0, 1.0] });
+        //for _i in range(6):
+        //    normals.append(Vector3(0.0, 1.0, 0.0))
+    }
+    if face_description.render_posz_face {
+        verts.push(Vertex { position: positions[7], color: [0.0, 0.0, 1.0], uv: [1.0, 0.0] });
+        verts.push(Vertex { position: positions[4], color: [0.0, 0.0, 1.0], uv: [0.0, 0.0] });
+        verts.push(Vertex { position: positions[1], color: [0.0, 0.0, 1.0], uv: [0.0, 1.0] });
+        verts.push(Vertex { position: positions[7], color: [0.0, 0.0, 1.0], uv: [1.0, 0.0] });
+        verts.push(Vertex { position: positions[1], color: [0.0, 0.0, 1.0], uv: [0.0, 1.0] });
+        verts.push(Vertex { position: positions[5], color: [0.0, 0.0, 1.0], uv: [1.0, 1.0] });
+        //for _i in range(6):
+        //    normals.append(Vector3(0.0, 0.0, 1.0))
+    }
+    verts
+}
 
+const CHUNK_SIZE: Vector3<usize> = vec3(32, 32, 32);
+
+pub struct VoxelChunk {
+    voxels: Array3D,
+    mesh_data: Option<Vec<Vertex>>,
+}
+
+impl VoxelChunk {
+    pub fn new() -> Self {
+        VoxelChunk {
+            voxels: Array3D::new(CHUNK_SIZE),
+            mesh_data: None,
+        }
+    }
+
+    pub fn set_voxel(&mut self, coord: Vector3<usize>, value: i32) {
+        self.voxels.set(coord, value);
+    }
+
+    pub fn create_vertices(&mut self) -> Vec<Vertex> {
+        let face_description = CubeFaceDescription {
+            render_posx_face: true,
+            render_negx_face: true,
+            render_posy_face: true,
+            render_negy_face: true,
+            render_posz_face: true,
+            render_negz_face: true,
+        };
+        create_cube_mesh(vec3(0.0, 0.0, 0.0), vec3(0.5, 0.5, 0.5), face_description)
+    }
+}

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use cgmath::vec2;
 use pollster::FutureExt as _;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
@@ -8,7 +9,9 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 use wgpu::util::DeviceExt;
 
-use crate::voxel::{INDICES, VERTICES, Vertex};
+use crate::camera::CameraUniform;
+use crate::game_state::GameState;
+use crate::voxel::Vertex;
 
 struct RenderState {
     window: Arc<Window>,
@@ -17,9 +20,9 @@ struct RenderState {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     render_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    n_indices: u32,
+    camera_uniform: CameraUniform,
+    camera_buffer: wgpu::Buffer,
+    camera_bind_group: wgpu::BindGroup,
 }
 
 impl RenderState {
@@ -53,9 +56,6 @@ impl RenderState {
         ).await.unwrap();
 
         let surface_caps = surface.get_capabilities(&adapter);
-        // Shader code in this tutorial assumes an sRGB surface texture. Using a different
-        // one will result in all the colors coming out darker. If you want to support non
-        // sRGB surfaces, you'll need to account for that when drawing to the frame.
         let surface_format = surface_caps.formats.iter()
             .find(|f| f.is_srgb())
             .copied()
@@ -73,11 +73,44 @@ impl RenderState {
 
         surface.configure(&device, &config);
 
+        let camera_uniform = CameraUniform::new();
+        let camera_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Camera Buffer"),
+                contents: bytemuck::cast_slice(&[camera_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+        let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+            label: Some("camera_bind_group_layout"),
+        });
+        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &camera_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                }
+            ],
+            label: Some("camera_bind_group"),
+        });
+
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[&camera_bind_group_layout],
                 push_constant_ranges: &[],
             });
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -86,7 +119,7 @@ impl RenderState {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[ Vertex::desc() ],
+                buffers: &[Vertex::buffer_layout()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -104,11 +137,8 @@ impl RenderState {
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
-                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLIP_CONTROL
                 unclipped_depth: false,
-                // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
             },
             depth_stencil: None,
@@ -121,19 +151,6 @@ impl RenderState {
             cache: None,
         });
 
-        let vertex_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(VERTICES),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-        let index_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(INDICES),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-
         RenderState {
             window: window_arc,
             surface,
@@ -141,13 +158,24 @@ impl RenderState {
             queue,
             config,
             render_pipeline,
-            vertex_buffer,
-            index_buffer,
-            n_indices: INDICES.len() as u32,
+            camera_uniform,
+            camera_buffer,
+            camera_bind_group,
         }
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    fn write_camera_buffer(&mut self) {
+        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+    }
+
+    fn render(&mut self, vertices: Vec<Vertex>) -> Result<(), wgpu::SurfaceError> {
+        let vertex_buffer = self.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(&vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -172,10 +200,11 @@ impl RenderState {
                 timestamp_writes: None,
             });
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
 
-            render_pass.draw_indexed(0..self.n_indices, 0, 0..1);
+            let n_vertices = vertices.len() as u32;
+            render_pass.draw(0..n_vertices, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -185,19 +214,41 @@ impl RenderState {
     }
 }
 
-#[derive(Default)]
 struct App {
     render_state: Option<RenderState>,
+    game_state: Option<GameState>,
 }
 
 impl App {
+    fn new() -> Self {
+        App {
+            render_state: None,
+            game_state: None
+        }
+    }
+
     async fn init_render_state(&mut self, event_loop: &ActiveEventLoop) {
-        let window = event_loop.create_window(Window::default_attributes()).unwrap();
+        let window_attributes = Window::default_attributes()
+            .with_title("Henka")
+            .with_inner_size(winit::dpi::PhysicalSize::new(1920, 1080));
+        let window = event_loop.create_window(window_attributes).unwrap();
         self.render_state = Some(RenderState::new(window).await);
+
+        let window_width = self.render_state.as_ref().unwrap().config.width;
+        let window_height = self.render_state.as_ref().unwrap().config.height;
+        self.game_state = Some(GameState::new(vec2(window_width, window_height)));
+    }
+
+    fn update(&mut self) {
+        self.game_state.as_mut().unwrap().update();
+        let view_projection = self.game_state.as_ref().unwrap().camera.build_view_projection_matrix();
+        self.render_state.as_mut().unwrap().camera_uniform.set_view_projection(view_projection);
+        self.render_state.as_mut().unwrap().write_camera_buffer();
     }
 
     fn render(&mut self) {
-        self.render_state.as_mut().unwrap().render().unwrap();
+        let vertices = self.game_state.as_mut().unwrap().chunk.create_vertices();
+        self.render_state.as_mut().unwrap().render(vertices).unwrap();
     }
 }
 
@@ -206,7 +257,7 @@ impl ApplicationHandler for App {
         self.init_render_state(event_loop).block_on();
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested
                 | WindowEvent::KeyboardInput {
@@ -219,20 +270,11 @@ impl ApplicationHandler for App {
                         ..
                 } => event_loop.exit(),
             WindowEvent::RedrawRequested => {
-                // Redraw the application.
-                //
-                // It's preferable for applications that do not render continuously to render in
-                // this event rather than in AboutToWait, since rendering in here allows
-                // the program to gracefully handle redraws requested by the OS.
-
+                self.update();
                 self.render();
-
-                // Queue a RedrawRequested event.
-                //
-                // You only need to call this if you've determined that you need to redraw in
-                // applications which do not always need to. Applications that redraw continuously
-                // can render here instead.
-                //self.window.as_ref().unwrap().request_redraw();
+                // TODO: This is getting frames as fast as possible, isn't it? Should probably
+                // delay for a fixed framerate instead.
+                self.render_state.as_ref().unwrap().window.request_redraw();
             }
             _ => (),
         }
@@ -242,6 +284,6 @@ impl ApplicationHandler for App {
 pub fn run() {
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
-    let mut app = App::default();
+    let mut app = App::new();
     event_loop.run_app(&mut app).unwrap();
 }
