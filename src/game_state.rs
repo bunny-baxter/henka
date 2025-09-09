@@ -37,9 +37,9 @@ impl GameState {
         self.t += 1;
         let orbit_t = self.t as f32 * 0.01;
         self.camera.position = point3(
-            self.camera.target.x + orbit_t.cos() * 0.8,
-            self.camera.target.y + 0.9,
-            self.camera.target.z + orbit_t.sin() * 0.8,
+            self.camera.target.x + orbit_t.cos() * 1.4,
+            self.camera.target.y + 0.6,
+            self.camera.target.z + orbit_t.sin() * 1.4,
         );
     }
 }
