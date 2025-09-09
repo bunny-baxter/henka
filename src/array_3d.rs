@@ -6,7 +6,7 @@ pub fn vec_i32_as_usize(v: Vector3<i32>) -> Vector3<usize> {
 
 #[derive(Clone)]
 pub struct Array3D {
-    size: Vector3<usize>,
+    pub size: Vector3<usize>,
     data: Vec<i32>,
 }
 

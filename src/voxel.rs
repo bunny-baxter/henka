@@ -1,3 +1,5 @@
+use std::cell::{Ref, RefCell};
+
 use cgmath::{Vector3, vec3};
 
 use crate::array_3d::Array3D;
@@ -123,32 +125,58 @@ fn create_cube_mesh(offset: Vector3<f32>, size: Vector3<f32>, face_description: 
 
 const CHUNK_SIZE: Vector3<usize> = vec3(32, 32, 32);
 
+const VOXEL_SIZE: Vector3<f32> = vec3(0.5, 0.5, 0.5);
+
 pub struct VoxelChunk {
     voxels: Array3D,
-    mesh_data: Option<Vec<Vertex>>,
+    cached_vertices: RefCell<Option<Vec<Vertex>>>,
 }
 
 impl VoxelChunk {
     pub fn new() -> Self {
         VoxelChunk {
             voxels: Array3D::new(CHUNK_SIZE),
-            mesh_data: None,
+            cached_vertices: None.into(),
         }
     }
 
+    fn clear_cached_vertices(&mut self) {
+        *self.cached_vertices.borrow_mut() = None;
+    }
+
     pub fn set_voxel(&mut self, coord: Vector3<usize>, value: i32) {
+        self.clear_cached_vertices();
         self.voxels.set(coord, value);
     }
 
-    pub fn create_vertices(&mut self) -> Vec<Vertex> {
-        let face_description = CubeFaceDescription {
-            render_posx_face: true,
-            render_negx_face: true,
-            render_posy_face: true,
-            render_negy_face: true,
-            render_posz_face: true,
-            render_negz_face: true,
-        };
-        create_cube_mesh(vec3(0.0, 0.0, 0.0), vec3(0.5, 0.5, 0.5), face_description)
+    fn create_vertices(&self) -> Vec<Vertex> {
+        let mut result = vec![];
+        for i in 0..self.voxels.size.x as i32 {
+            for j in 0..self.voxels.size.y as i32 {
+                for k in 0..self.voxels.size.z as i32 {
+                    let coord = vec3(i, j, k);
+                    if self.voxels.get_i32(coord) > 0 {
+                        let offset = vec3(coord.x as f32 * VOXEL_SIZE.x, coord.y as f32 * VOXEL_SIZE.y, coord.z as f32 * VOXEL_SIZE.z);
+                        let face_description = CubeFaceDescription {
+                            render_posx_face: true,
+                            render_negx_face: true,
+                            render_posy_face: true,
+                            render_negy_face: true,
+                            render_posz_face: true,
+                            render_negz_face: true,
+                        };
+                        result.extend(create_cube_mesh(offset, VOXEL_SIZE, face_description));
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    pub fn get_vertices(&self) -> Ref<Vec<Vertex>> {
+        if self.cached_vertices.borrow().is_none() {
+            *self.cached_vertices.borrow_mut() = Some(self.create_vertices());
+        }
+        Ref::map(self.cached_vertices.borrow(), |option| option.as_ref().unwrap())
     }
 }

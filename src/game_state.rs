@@ -1,4 +1,4 @@
-use cgmath::{point3, Vector2};
+use cgmath::{point3, Vector2, vec3};
 
 use crate::voxel::VoxelChunk;
 use crate::camera::Camera;
@@ -17,6 +17,14 @@ impl GameState {
             chunk: VoxelChunk::new(),
             camera: Camera::new(point3(-2.0, 0.0, 2.0), point3(0.25, 0.25, 0.25), aspect_ratio),
         }
+    }
+
+    pub fn generate_voxels(&mut self) {
+        self.chunk.set_voxel(vec3(0, 0, 0), 1);
+        self.chunk.set_voxel(vec3(1, 0, 0), 1);
+        self.chunk.set_voxel(vec3(0, 0, 1), 1);
+        self.chunk.set_voxel(vec3(1, 0, 1), 1);
+        self.chunk.set_voxel(vec3(0, 1, 0), 1);
     }
 
     pub fn update(&mut self) {

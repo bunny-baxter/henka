@@ -168,7 +168,7 @@ impl RenderState {
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
 
-    fn render(&mut self, vertices: Vec<Vertex>) -> Result<(), wgpu::SurfaceError> {
+    fn render(&mut self, vertices: &Vec<Vertex>) -> Result<(), wgpu::SurfaceError> {
         let vertex_buffer = self.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
@@ -237,6 +237,7 @@ impl App {
         let window_width = self.render_state.as_ref().unwrap().config.width;
         let window_height = self.render_state.as_ref().unwrap().config.height;
         self.game_state = Some(GameState::new(vec2(window_width, window_height)));
+        self.game_state.as_mut().unwrap().generate_voxels();
     }
 
     fn update(&mut self) {
@@ -247,8 +248,8 @@ impl App {
     }
 
     fn render(&mut self) {
-        let vertices = self.game_state.as_mut().unwrap().chunk.create_vertices();
-        self.render_state.as_mut().unwrap().render(vertices).unwrap();
+        let vertices = self.game_state.as_mut().unwrap().chunk.get_vertices();
+        self.render_state.as_mut().unwrap().render(&vertices).unwrap();
     }
 }
 
