@@ -4,7 +4,7 @@ pub struct Camera {
     pub position: Point3<f32>,
     pub target: Point3<f32>,
     up: Vector3<f32>,
-    aspect_ratio: f32,
+    pub aspect_ratio: f32,
     fov_y: f32,
     z_near: f32,
     z_far: f32,
@@ -17,7 +17,7 @@ impl Camera {
             target: target,
             up: cgmath::Vector3::unit_y(),
             aspect_ratio: aspect_ratio,
-            fov_y: 45.0,
+            fov_y: 65.0,
             z_near: 0.1,
             z_far: 100.0,
         }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cgmath::vec2;
+use cgmath::{vec2, Vector2};
 use pollster::FutureExt as _;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
@@ -216,15 +216,20 @@ impl RenderState {
 
 struct App {
     render_state: Option<RenderState>,
-    game_state: Option<GameState>,
+    game_state: GameState,
 }
 
 impl App {
     fn new() -> Self {
         App {
             render_state: None,
-            game_state: None
+            game_state: GameState::new(),
         }
+    }
+
+    fn get_window_size(&self) -> Vector2<u32> {
+        let render_state = self.render_state.as_ref().unwrap();
+        return vec2(render_state.config.width, render_state.config.height);
     }
 
     async fn init_render_state(&mut self, event_loop: &ActiveEventLoop) {
@@ -234,21 +239,19 @@ impl App {
         let window = event_loop.create_window(window_attributes).unwrap();
         self.render_state = Some(RenderState::new(window).await);
 
-        let window_width = self.render_state.as_ref().unwrap().config.width;
-        let window_height = self.render_state.as_ref().unwrap().config.height;
-        self.game_state = Some(GameState::new(vec2(window_width, window_height)));
-        self.game_state.as_mut().unwrap().generate_voxels();
+        self.game_state.set_window_size(self.get_window_size());
+        self.game_state.generate_voxels();
     }
 
     fn update(&mut self) {
-        self.game_state.as_mut().unwrap().update();
-        let view_projection = self.game_state.as_ref().unwrap().camera.build_view_projection_matrix();
+        self.game_state.update();
+        let view_projection = self.game_state.camera.build_view_projection_matrix();
         self.render_state.as_mut().unwrap().camera_uniform.set_view_projection(view_projection);
         self.render_state.as_mut().unwrap().write_camera_buffer();
     }
 
     fn render(&mut self) {
-        let vertices = self.game_state.as_mut().unwrap().chunk.get_vertices();
+        let vertices = self.game_state.chunk.get_vertices();
         self.render_state.as_mut().unwrap().render(&vertices).unwrap();
     }
 }

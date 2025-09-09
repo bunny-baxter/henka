@@ -23,6 +23,7 @@ impl Array3D {
         coord.z * self.size.x * self.size.y + coord.y * self.size.x + coord.x
     }
 
+    #[allow(unused)]
     fn index_to_coord(&self, index: usize) -> Vector3<usize> {
         let z = index / (self.size.x * self.size.y);
         let remainder = index % (self.size.x * self.size.y);

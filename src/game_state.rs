@@ -1,22 +1,28 @@
-use cgmath::{point3, Vector2, vec3};
+use cgmath::{point3, Vector2, vec2, vec3};
 
 use crate::voxel::VoxelChunk;
 use crate::camera::Camera;
 
 pub struct GameState {
     pub t: i32,
+    pub window_size: Vector2<u32>,
     pub chunk: VoxelChunk,
     pub camera: Camera,
 }
 
 impl GameState {
-    pub fn new(window_size: Vector2<u32>) -> Self {
-        let aspect_ratio = window_size.x as f32 / window_size.y as f32;
+    pub fn new() -> Self {
         GameState {
             t: 0,
+            window_size: vec2(0, 0),
             chunk: VoxelChunk::new(),
-            camera: Camera::new(point3(-2.0, 0.0, 2.0), point3(0.25, 0.25, 0.25), aspect_ratio),
+            camera: Camera::new(point3(-2.0, 0.0, 2.0), point3(0.25, 0.25, 0.25), 0.0),
         }
+    }
+
+    pub fn set_window_size(&mut self, window_size: Vector2<u32>) {
+        self.window_size = window_size;
+        self.camera.aspect_ratio = window_size.x as f32 / window_size.y as f32;
     }
 
     pub fn generate_voxels(&mut self) {
