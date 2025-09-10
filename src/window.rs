@@ -5,7 +5,7 @@ use pollster::FutureExt as _;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowId};
 use wgpu::util::DeviceExt;
 
@@ -281,24 +281,31 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested
-                | WindowEvent::KeyboardInput {
-                    event:
-                        KeyEvent {
-                            state: ElementState::Pressed,
-                            physical_key: PhysicalKey::Code(KeyCode::Escape),
-                            ..
-                        },
+            WindowEvent::CloseRequested => self.game_state.exit = true,
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        state,
+                        physical_key: PhysicalKey::Code(key_code),
                         ..
-                } => event_loop.exit(),
+                    },
+                ..
+            } => {
+                if state == ElementState::Pressed {
+                    self.game_state.on_key_pressed(key_code);
+                } else if state == ElementState::Released {
+                    self.game_state.on_key_released(key_code);
+                }
+            },
             WindowEvent::RedrawRequested => {
                 self.update();
                 self.render();
-                // TODO: This is getting frames as fast as possible, isn't it? Should probably
-                // delay for a fixed framerate instead.
                 self.render_state.as_ref().unwrap().window.request_redraw();
             }
             _ => (),
+        }
+        if self.game_state.exit {
+            event_loop.exit();
         }
     }
 }
