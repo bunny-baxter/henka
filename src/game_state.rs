@@ -1,16 +1,14 @@
 use cgmath::{point3, Vector2, vec2, vec3};
 use winit::keyboard::KeyCode;
 
-use crate::voxel::VoxelChunk;
+use crate::voxel::{CHUNK_SIZE, VoxelChunk};
 use crate::camera::Camera;
+use crate::window::InputState;
 
 struct OrbitCameraController {
     t: i32,
+    height: f32,
     zoom: f32,
-    is_forward_pressed: bool,
-    is_backward_pressed: bool,
-    is_left_pressed: bool,
-    is_right_pressed: bool,
 }
 
 pub struct GameState {
@@ -31,10 +29,7 @@ impl GameState {
             camera_controller: OrbitCameraController {
                 t: 0,
                 zoom: 1.4,
-                is_forward_pressed: false,
-                is_backward_pressed: false,
-                is_left_pressed: false,
-                is_right_pressed: false,
+                height: 0.6,
             },
         }
     }
@@ -45,54 +40,55 @@ impl GameState {
     }
 
     pub fn generate_voxels(&mut self) {
-        self.chunk.set_voxel(vec3(0, 0, 0), 1);
-        self.chunk.set_voxel(vec3(1, 0, 0), 1);
-        self.chunk.set_voxel(vec3(0, 0, 1), 1);
-        self.chunk.set_voxel(vec3(1, 0, 1), 1);
-        self.chunk.set_voxel(vec3(0, 1, 0), 1);
+        for i in 0..CHUNK_SIZE.x {
+            for k in 0..CHUNK_SIZE.z {
+                for j in 0..3 {
+                    self.chunk.set_voxel(vec3(i, j, k), 1);
+                }
+            }
+        }
+        self.chunk.set_voxel(vec3(4, 4, 4), 1);
     }
 
     pub fn on_key_pressed(&mut self, key_code: KeyCode) {
         match key_code {
             KeyCode::KeyQ => self.exit = true,
-            KeyCode::KeyW | KeyCode::ArrowUp => self.camera_controller.is_forward_pressed = true,
-            KeyCode::KeyA | KeyCode::ArrowLeft => self.camera_controller.is_left_pressed = true,
-            KeyCode::KeyS | KeyCode::ArrowDown => self.camera_controller.is_backward_pressed = true,
-            KeyCode::KeyD | KeyCode::ArrowRight => self.camera_controller.is_right_pressed = true,
             _ => (),
         };
     }
 
     pub fn on_key_released(&mut self, key_code: KeyCode) {
         match key_code {
-            KeyCode::KeyW | KeyCode::ArrowUp => self.camera_controller.is_forward_pressed = false,
-            KeyCode::KeyA | KeyCode::ArrowLeft => self.camera_controller.is_left_pressed = false,
-            KeyCode::KeyS | KeyCode::ArrowDown => self.camera_controller.is_backward_pressed = false,
-            KeyCode::KeyD | KeyCode::ArrowRight => self.camera_controller.is_right_pressed = false,
             _ => (),
         };
     }
 
-    pub fn update(&mut self) {
-        if self.camera_controller.is_forward_pressed {
+    pub fn update(&mut self, input_state: &InputState) {
+        if input_state.is_key_pressed(KeyCode::KeyW) | input_state.is_key_pressed(KeyCode::ArrowUp) {
             self.camera_controller.zoom -= 0.01;
         }
-        if self.camera_controller.is_backward_pressed {
+        if input_state.is_key_pressed(KeyCode::KeyS) | input_state.is_key_pressed(KeyCode::ArrowDown) {
             self.camera_controller.zoom += 0.01;
         }
         if self.camera_controller.zoom < 0.5 {
             self.camera_controller.zoom = 0.5;
         }
-        if self.camera_controller.is_right_pressed {
+        if input_state.is_key_pressed(KeyCode::KeyD) | input_state.is_key_pressed(KeyCode::ArrowRight) {
             self.camera_controller.t += 1;
         }
-        if self.camera_controller.is_left_pressed {
+        if input_state.is_key_pressed(KeyCode::KeyA) | input_state.is_key_pressed(KeyCode::ArrowLeft) {
             self.camera_controller.t -= 1;
+        }
+        if input_state.is_key_pressed(KeyCode::KeyJ) {
+            self.camera_controller.height -= 0.05;
+        }
+        if input_state.is_key_pressed(KeyCode::KeyK) {
+            self.camera_controller.height += 0.05;
         }
         let orbit_t = self.camera_controller.t as f32 * 0.02;
         self.camera.position = point3(
             self.camera.target.x + orbit_t.cos() * self.camera_controller.zoom,
-            self.camera.target.y + 0.6,
+            self.camera.target.y + self.camera_controller.height,
             self.camera.target.z + orbit_t.sin() * self.camera_controller.zoom,
         );
     }

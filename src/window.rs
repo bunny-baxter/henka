@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use cgmath::{vec2, Vector2};
@@ -5,7 +6,7 @@ use pollster::FutureExt as _;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::PhysicalKey;
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 use wgpu::util::DeviceExt;
 
@@ -232,8 +233,39 @@ impl RenderState {
     }
 }
 
+pub struct InputState {
+    keys: HashSet<KeyCode>,
+    left_mouse: bool,
+}
+
+impl InputState {
+    fn new() -> Self {
+        Self {
+            keys: HashSet::new(),
+            left_mouse: false,
+        }
+    }
+
+    fn on_key_pressed(&mut self, key_code: KeyCode) {
+        self.keys.insert(key_code);
+    }
+
+    fn on_key_released(&mut self, key_code: KeyCode) {
+        self.keys.remove(&key_code);
+    }
+
+    pub fn is_key_pressed(&self, key_code: KeyCode) -> bool {
+        self.keys.contains(&key_code)
+    }
+
+    pub fn is_left_mouse_pressed(&self) -> bool {
+        self.left_mouse
+    }
+}
+
 struct App {
     render_state: Option<RenderState>,
+    input_state: InputState,
     game_state: GameState,
 }
 
@@ -241,6 +273,7 @@ impl App {
     fn new() -> Self {
         App {
             render_state: None,
+            input_state: InputState::new(),
             game_state: GameState::new(),
         }
     }
@@ -262,7 +295,7 @@ impl App {
     }
 
     fn update(&mut self) {
-        self.game_state.update();
+        self.game_state.update(&self.input_state);
         let view_projection = self.game_state.camera.build_view_projection_matrix();
         self.render_state.as_mut().unwrap().camera_uniform.set_view_projection(view_projection);
         self.render_state.as_mut().unwrap().write_camera_buffer();
@@ -292,8 +325,10 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 if state == ElementState::Pressed {
+                    self.input_state.on_key_pressed(key_code);
                     self.game_state.on_key_pressed(key_code);
                 } else if state == ElementState::Released {
+                    self.input_state.on_key_released(key_code);
                     self.game_state.on_key_released(key_code);
                 }
             },

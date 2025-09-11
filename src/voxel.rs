@@ -123,7 +123,7 @@ fn create_cube_mesh(offset: Vector3<f32>, size: Vector3<f32>, face_description: 
     verts
 }
 
-const CHUNK_SIZE: Vector3<usize> = vec3(32, 32, 32);
+pub const CHUNK_SIZE: Vector3<usize> = vec3(32, 32, 32);
 
 const VOXEL_SIZE: Vector3<f32> = vec3(0.5, 0.5, 0.5);
 
