@@ -149,6 +149,14 @@ impl VoxelChunk {
         self.voxels.set(coord, value);
     }
 
+    fn is_face_visible(&self, voxel_position: Vector3<i32>, face_direction: Vector3<i32>) -> bool {
+        let adjacent_position = voxel_position + face_direction;
+        if self.voxels.is_i32_out_of_bounds(adjacent_position) {
+            return true;
+        }
+        return self.voxels.get_i32(adjacent_position) == 0;
+    }
+
     fn create_vertices(&self) -> Vec<Vertex> {
         let mut result = vec![];
         for i in 0..self.voxels.size.x as i32 {
@@ -158,12 +166,12 @@ impl VoxelChunk {
                     if self.voxels.get_i32(coord) > 0 {
                         let offset = vec3(coord.x as f32 * VOXEL_SIZE.x, coord.y as f32 * VOXEL_SIZE.y, coord.z as f32 * VOXEL_SIZE.z);
                         let face_description = CubeFaceDescription {
-                            render_posx_face: true,
-                            render_negx_face: true,
-                            render_posy_face: true,
-                            render_negy_face: true,
-                            render_posz_face: true,
-                            render_negz_face: true,
+                            render_posx_face: self.is_face_visible(coord, vec3(1, 0, 0)),
+                            render_negx_face: self.is_face_visible(coord, vec3(-1, 0, 0)),
+                            render_posy_face: self.is_face_visible(coord, vec3(0, 1, 0)),
+                            render_negy_face: self.is_face_visible(coord, vec3(0, -1, 0)),
+                            render_posz_face: self.is_face_visible(coord, vec3(0, 0, 1)),
+                            render_negz_face: self.is_face_visible(coord, vec3(0, 0, -1)),
                         };
                         result.extend(create_cube_mesh(offset, VOXEL_SIZE, face_description));
                     }
