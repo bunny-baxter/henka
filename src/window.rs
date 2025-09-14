@@ -329,7 +329,6 @@ impl ApplicationHandler for App {
                     self.game_state.on_key_pressed(key_code);
                 } else if state == ElementState::Released {
                     self.input_state.on_key_released(key_code);
-                    self.game_state.on_key_released(key_code);
                 }
             },
             WindowEvent::RedrawRequested => {

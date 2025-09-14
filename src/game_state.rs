@@ -1,10 +1,29 @@
-use cgmath::{Point3, point3, Vector2, vec2, Vector3, vec3};
+use cgmath::{InnerSpace, Point3, point3, Vector2, vec2, Vector3, vec3};
 use fixed::types::I24F8;
 use winit::keyboard::KeyCode;
 
 use crate::voxel::{CHUNK_SIZE, VoxelChunk, Vertex};
 use crate::camera::Camera;
 use crate::window::InputState;
+
+struct FirstPersonCameraController {
+    pitch: f32,
+    yaw: f32,
+}
+
+impl FirstPersonCameraController {
+    fn get_forward(&self) -> Vector3<f32> {
+        Vector3::new(
+            self.yaw.cos() * self.pitch.cos(),
+            self.pitch.sin(),
+            self.yaw.sin() * self.pitch.cos()
+        )
+    }
+
+    fn get_camera_target(&self, position: &Point3<f32>) -> Point3<f32> {
+        position + self.get_forward()
+    }
+}
 
 struct OrbitCameraController {
     t: i32,
@@ -91,7 +110,9 @@ pub struct GameState {
     pub window_size: Vector2<u32>,
     pub chunk: VoxelChunk,
     pub camera: Camera,
-    camera_controller: OrbitCameraController,
+    first_person_camera_controller: FirstPersonCameraController,
+    orbit_camera_controller: OrbitCameraController,
+    is_camera_first_person: bool,
     player: PlayerActor,
 }
 
@@ -104,11 +125,16 @@ impl GameState {
             window_size: vec2(0, 0),
             chunk: VoxelChunk::new(),
             camera: Camera::new(point3(-2.0, 0.0, 2.0), point3(0.25, 0.25, 0.25), 0.0),
-            camera_controller: OrbitCameraController {
+            first_person_camera_controller: FirstPersonCameraController {
+                pitch: 0.0,
+                yaw: 0.0,
+            },
+            orbit_camera_controller: OrbitCameraController {
                 t: 0,
                 zoom: 1.4,
                 height: 0.6,
             },
+            is_camera_first_person: true,
             player,
         }
     }
@@ -132,41 +158,73 @@ impl GameState {
     pub fn on_key_pressed(&mut self, key_code: KeyCode) {
         match key_code {
             KeyCode::KeyQ => self.exit = true,
-            _ => (),
-        };
-    }
-
-    pub fn on_key_released(&mut self, key_code: KeyCode) {
-        match key_code {
+            KeyCode::KeyC => self.is_camera_first_person = !self.is_camera_first_person,
             _ => (),
         };
     }
 
     pub fn update(&mut self, input_state: &InputState) {
-        if input_state.is_key_pressed(KeyCode::KeyW) | input_state.is_key_pressed(KeyCode::ArrowUp) {
-            self.camera_controller.zoom -= 0.01;
+        if self.is_camera_first_person {
+            let forward = self.first_person_camera_controller.get_forward();
+            let forward_fixed = forward.map(|i| I24F8::from_num(i * 0.01));
+            let right = forward.cross(cgmath::Vector3::unit_y()).normalize();
+            let right_fixed = right.map(|i| I24F8::from_num(i * 0.01));
+            if input_state.is_key_pressed(KeyCode::KeyW) {
+                self.player.position.x += forward_fixed.x;
+                self.player.position.z += forward_fixed.z;
+            }
+            if input_state.is_key_pressed(KeyCode::KeyS) {
+                self.player.position.x -= forward_fixed.x;
+                self.player.position.z -= forward_fixed.z;
+            }
+            if input_state.is_key_pressed(KeyCode::KeyD) {
+                self.player.position.x += right_fixed.x;
+                self.player.position.z += right_fixed.z;
+            }
+            if input_state.is_key_pressed(KeyCode::KeyA) {
+                self.player.position.x -= right_fixed.x;
+                self.player.position.z -= right_fixed.z;
+            }
+            if input_state.is_key_pressed(KeyCode::ArrowUp) {
+                self.first_person_camera_controller.pitch += 0.01;
+            }
+            if input_state.is_key_pressed(KeyCode::ArrowDown) {
+                self.first_person_camera_controller.pitch -= 0.01;
+            }
+            if input_state.is_key_pressed(KeyCode::ArrowRight) {
+                self.first_person_camera_controller.yaw += 0.01;
+            }
+            if input_state.is_key_pressed(KeyCode::ArrowLeft) {
+                self.first_person_camera_controller.yaw -= 0.01;
+            }
+            self.camera.position = self.player.position.map(|i| i.to_num::<f32>());
+            self.camera.position.y += 0.4;
+            self.camera.target = self.first_person_camera_controller.get_camera_target(&self.camera.position);
+        } else {
+            if input_state.is_key_pressed(KeyCode::KeyW) | input_state.is_key_pressed(KeyCode::ArrowUp) {
+                self.orbit_camera_controller.zoom -= 0.01;
+            }
+            if input_state.is_key_pressed(KeyCode::KeyS) | input_state.is_key_pressed(KeyCode::ArrowDown) {
+                self.orbit_camera_controller.zoom += 0.01;
+            }
+            if self.orbit_camera_controller.zoom < 0.5 {
+                self.orbit_camera_controller.zoom = 0.5;
+            }
+            if input_state.is_key_pressed(KeyCode::KeyD) | input_state.is_key_pressed(KeyCode::ArrowRight) {
+                self.orbit_camera_controller.t += 1;
+            }
+            if input_state.is_key_pressed(KeyCode::KeyA) | input_state.is_key_pressed(KeyCode::ArrowLeft) {
+                self.orbit_camera_controller.t -= 1;
+            }
+            if input_state.is_key_pressed(KeyCode::KeyJ) {
+                self.orbit_camera_controller.height -= 0.05;
+            }
+            if input_state.is_key_pressed(KeyCode::KeyK) {
+                self.orbit_camera_controller.height += 0.05;
+            }
+            self.camera.target = self.player.position.map(|i| i.to_num::<f32>());
+            self.camera.position = self.orbit_camera_controller.get_camera_position(&self.camera.target);
         }
-        if input_state.is_key_pressed(KeyCode::KeyS) | input_state.is_key_pressed(KeyCode::ArrowDown) {
-            self.camera_controller.zoom += 0.01;
-        }
-        if self.camera_controller.zoom < 0.5 {
-            self.camera_controller.zoom = 0.5;
-        }
-        if input_state.is_key_pressed(KeyCode::KeyD) | input_state.is_key_pressed(KeyCode::ArrowRight) {
-            self.camera_controller.t += 1;
-        }
-        if input_state.is_key_pressed(KeyCode::KeyA) | input_state.is_key_pressed(KeyCode::ArrowLeft) {
-            self.camera_controller.t -= 1;
-        }
-        if input_state.is_key_pressed(KeyCode::KeyJ) {
-            self.camera_controller.height -= 0.05;
-        }
-        if input_state.is_key_pressed(KeyCode::KeyK) {
-            self.camera_controller.height += 0.05;
-        }
-        self.player.position.z += I24F8::from_bits(1);
-        self.camera.target = self.player.position.map(|i| i.to_num::<f32>());
-        self.camera.position = self.camera_controller.get_camera_position(&self.camera.target);
     }
 
     pub fn get_vertices(&self) -> Vec<Vertex> {
