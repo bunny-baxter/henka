@@ -7,9 +7,9 @@ use crate::array_3d::Array3D;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
-    position: [f32; 3],
-    color: [f32; 3],
-    uv: [f32; 2],
+    pub position: [f32; 3],
+    pub color: [f32; 3],
+    pub uv: [f32; 2],
 }
 
 impl Vertex {

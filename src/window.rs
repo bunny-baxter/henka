@@ -302,7 +302,7 @@ impl App {
     }
 
     fn render(&mut self) {
-        let vertices = self.game_state.chunk.get_vertices();
+        let vertices = self.game_state.get_vertices();
         self.render_state.as_mut().unwrap().render(&vertices).unwrap();
     }
 }
