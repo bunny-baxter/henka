@@ -181,7 +181,7 @@ impl VoxelChunk {
         result
     }
 
-    pub fn get_vertices(&self) -> Ref<Vec<Vertex>> {
+    pub fn get_vertices(&self) -> Ref<'_, Vec<Vertex>> {
         if self.cached_vertices.borrow().is_none() {
             *self.cached_vertices.borrow_mut() = Some(self.create_vertices());
         }

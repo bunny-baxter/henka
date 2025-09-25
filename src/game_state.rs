@@ -42,8 +42,8 @@ impl OrbitCameraController {
     }
 }
 
-struct PlayerActor {
-    position: Point3<I24F8>,
+pub struct PlayerActor {
+    pub position: Point3<I24F8>,
 }
 
 impl PlayerActor {
@@ -113,7 +113,7 @@ pub struct GameState {
     first_person_camera_controller: FirstPersonCameraController,
     orbit_camera_controller: OrbitCameraController,
     is_camera_first_person: bool,
-    player: PlayerActor,
+    pub player: PlayerActor,
 }
 
 impl GameState {

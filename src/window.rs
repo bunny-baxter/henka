@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Instant;
 
 use cgmath::{vec2, Vector2};
 use pollster::FutureExt as _;
@@ -9,13 +10,14 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 use wgpu::util::DeviceExt;
+use wgpu_text::{glyph_brush::{Section as TextSection, OwnedText, ab_glyph::FontRef, OwnedSection}, BrushBuilder, TextBrush};
 
 use crate::camera::CameraUniform;
 use crate::game_state::GameState;
 use crate::texture::DepthTexture;
 use crate::voxel::Vertex;
 
-struct RenderState {
+struct RenderState<'a> {
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -26,9 +28,13 @@ struct RenderState {
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    #[allow(unused)]
+    font: &'a [u8],
+    text_brush: TextBrush<FontRef<'a>>,
+    text_section: OwnedSection,
 }
 
-impl RenderState {
+impl RenderState<'_> {
     async fn new(window: Window) -> Self {
         let size = window.inner_size();
         let window_arc = Arc::new(window);
@@ -111,6 +117,23 @@ impl RenderState {
             label: Some("camera_bind_group"),
         });
 
+        let depth_stencil_state = wgpu::DepthStencilState {
+            format: DepthTexture::DEPTH_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        };
+
+        let font = include_bytes!("Rubik-Regular.ttf");
+        let text_brush = BrushBuilder::using_font_bytes(font).unwrap()
+            .with_depth_stencil(Some(depth_stencil_state.clone()))
+            .build(&device, config.width, config.height, config.format);
+        let text_section = TextSection::default()
+            .with_bounds((config.width as f32 * 0.4, config.height as f32))
+            .with_screen_position((32.0, 32.0))
+            .to_owned();
+
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -146,13 +169,7 @@ impl RenderState {
                 unclipped_depth: false,
                 conservative: false,
             },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DepthTexture::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
+            depth_stencil: Some(depth_stencil_state),
             multisample: wgpu::MultisampleState {
                 count: 1,
                 mask: !0,
@@ -173,11 +190,15 @@ impl RenderState {
             camera_uniform,
             camera_buffer,
             camera_bind_group,
+            font,
+            text_brush,
+            text_section,
         }
     }
 
-    fn write_camera_buffer(&mut self) {
+    fn write_buffers(&mut self) {
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+        self.text_brush.queue(&self.device, &self.queue, [&self.text_section]).unwrap();
     }
 
     fn render(&mut self, vertices: &Vec<Vertex>) -> Result<(), wgpu::SurfaceError> {
@@ -224,6 +245,8 @@ impl RenderState {
 
             let n_vertices = vertices.len() as u32;
             render_pass.draw(0..n_vertices, 0..1);
+
+            self.text_brush.draw(&mut render_pass);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -263,18 +286,23 @@ impl InputState {
     }
 }
 
-struct App {
-    render_state: Option<RenderState>,
+struct App<'a> {
+    render_state: Option<RenderState<'a>>,
     input_state: InputState,
     game_state: GameState,
+
+    update_time_average: f64,
+    render_time_average: f64,
 }
 
-impl App {
+impl App<'_> {
     fn new() -> Self {
         App {
             render_state: None,
             input_state: InputState::new(),
             game_state: GameState::new(),
+            update_time_average: 0.0,
+            render_time_average: 0.0,
         }
     }
 
@@ -298,7 +326,13 @@ impl App {
         self.game_state.update(&self.input_state);
         let view_projection = self.game_state.camera.build_view_projection_matrix();
         self.render_state.as_mut().unwrap().camera_uniform.set_view_projection(view_projection);
-        self.render_state.as_mut().unwrap().write_camera_buffer();
+        let update_time_str = format!("update: {:.2}ms \n", self.update_time_average / 1000.0);
+        let render_time_str = format!("render: {:.2}ms \n", self.render_time_average / 1000.0);
+        self.render_state.as_mut().unwrap().text_section.text = vec![
+            OwnedText::new(update_time_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
+            OwnedText::new(render_time_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
+        ];
+        self.render_state.as_mut().unwrap().write_buffers();
     }
 
     fn render(&mut self) {
@@ -307,7 +341,7 @@ impl App {
     }
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler for App<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.init_render_state(event_loop).block_on();
     }
@@ -332,8 +366,12 @@ impl ApplicationHandler for App {
                 }
             },
             WindowEvent::RedrawRequested => {
+                let pre_update = Instant::now();
                 self.update();
+                self.update_time_average = self.update_time_average * 0.99 + pre_update.elapsed().as_micros() as f64 * 0.01;
+                let pre_render = Instant::now();
                 self.render();
+                self.render_time_average = self.render_time_average * 0.99 + pre_render.elapsed().as_micros() as f64 * 0.01;
                 self.render_state.as_ref().unwrap().window.request_redraw();
             }
             _ => (),
