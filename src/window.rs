@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use cgmath::{vec2, Vector2};
@@ -14,8 +15,16 @@ use wgpu_text::{glyph_brush::{Section as TextSection, OwnedText, ab_glyph::FontR
 
 use crate::camera::CameraUniform;
 use crate::game_state::GameState;
+use crate::render_util::MovingAverage;
 use crate::texture::DepthTexture;
 use crate::voxel::Vertex;
+
+struct TimestampQueryState {
+    query_set: wgpu::QuerySet,
+    buffer: wgpu::Buffer,
+    readback_buffer: Arc<wgpu::Buffer>,
+    last_render_measurement_ns: Arc<AtomicU64>,
+}
 
 struct RenderState<'a> {
     window: Arc<Window>,
@@ -23,6 +32,7 @@ struct RenderState<'a> {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    timestamp_query_state: Option<TimestampQueryState>,
     render_pipeline: wgpu::RenderPipeline,
     depth_texture: DepthTexture,
     camera_uniform: CameraUniform,
@@ -54,9 +64,16 @@ impl RenderState<'_> {
             },
         ).await.unwrap();
 
+        let timestamp_query_enabled = !(adapter.features() & wgpu::Features::TIMESTAMP_QUERY).is_empty();
+        let required_features = if timestamp_query_enabled {
+            wgpu::Features::TIMESTAMP_QUERY
+        } else {
+            wgpu::Features::empty()
+        };
+
         let (device, queue) = adapter.request_device(
             &wgpu::DeviceDescriptor {
-                required_features: wgpu::Features::empty(),
+                required_features,
                 required_limits: wgpu::Limits::default(),
                 label: None,
                 memory_hints: Default::default(),
@@ -134,6 +151,34 @@ impl RenderState<'_> {
             .with_screen_position((32.0, 32.0))
             .to_owned();
 
+        let timestamp_query_state = if timestamp_query_enabled {
+            let timestamp_query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
+                label: Some("Timestamp Query Set"),
+                ty: wgpu::QueryType::Timestamp,
+                count: 2, // start and end
+            });
+            let timestamp_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Timestamp Buffer"),
+                size: 16, // 2 timestamps * 8 bytes each
+                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            let timestamp_readback_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Timestamp Readback"),
+                size: 16,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            Some(TimestampQueryState {
+                query_set: timestamp_query_set,
+                buffer: timestamp_buffer,
+                readback_buffer: Arc::new(timestamp_readback_buffer),
+                last_render_measurement_ns: Arc::new(0.into()),
+            })
+        } else {
+            None
+        };
+
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -185,6 +230,7 @@ impl RenderState<'_> {
             device,
             queue,
             config,
+            timestamp_query_state,
             render_pipeline,
             depth_texture,
             camera_uniform,
@@ -237,7 +283,13 @@ impl RenderState<'_> {
                     stencil_ops: None,
                 }),
                 occlusion_query_set: None,
-                timestamp_writes: None,
+                timestamp_writes: self.timestamp_query_state.as_ref().map(|qs| {
+                    wgpu::RenderPassTimestampWrites {
+                        query_set: &qs.query_set,
+                        beginning_of_pass_write_index: Some(0),
+                        end_of_pass_write_index: Some(1),
+                    }
+                }),
             });
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
@@ -249,8 +301,34 @@ impl RenderState<'_> {
             self.text_brush.draw(&mut render_pass);
         }
 
+        if let Some(qs) = self.timestamp_query_state.as_ref() {
+            encoder.resolve_query_set(&qs.query_set, 0..2, &qs.buffer, 0);
+            encoder.copy_buffer_to_buffer(&qs.buffer, 0, &qs.readback_buffer, 0, 16);
+
+            // Ensure the previous frame's timestamp callback has run so the readback buffer is unmapped before we call `submit`.
+            self.device.poll(wgpu::PollType::Wait).unwrap();
+        }
+
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
+
+        if let Some(qs) = self.timestamp_query_state.as_ref() {
+            let readback_ref = qs.readback_buffer.clone();
+            let measurement_ref = qs.last_render_measurement_ns.clone();
+            qs.readback_buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| {
+                if result.is_ok() {
+                    {
+                        let data = readback_ref.slice(..).get_mapped_range();
+                        let timestamps: &[u64] = bytemuck::cast_slice(&data);
+                        let duration_ns = timestamps[1].saturating_sub(timestamps[0]);
+                        if duration_ns > 0 {
+                            measurement_ref.store(duration_ns, Ordering::Relaxed);
+                        }
+                    }
+                    readback_ref.unmap();
+                }
+            });
+        }
 
         Ok(())
     }
@@ -287,22 +365,27 @@ impl InputState {
 }
 
 struct App<'a> {
+    frame_count: u64,
+    last_frame: Instant,
+
     render_state: Option<RenderState<'a>>,
     input_state: InputState,
     game_state: GameState,
 
-    update_time_average: f64,
-    render_time_average: f64,
+    frame_delta: MovingAverage,
+    update_time: MovingAverage,
 }
 
 impl App<'_> {
     fn new() -> Self {
         App {
+            frame_count: 0,
+            last_frame: Instant::now(),
             render_state: None,
             input_state: InputState::new(),
             game_state: GameState::new(),
-            update_time_average: 0.0,
-            render_time_average: 0.0,
+            frame_delta: MovingAverage::new(100),
+            update_time: MovingAverage::new(100),
         }
     }
 
@@ -326,13 +409,25 @@ impl App<'_> {
         self.game_state.update(&self.input_state);
         let view_projection = self.game_state.camera.build_view_projection_matrix();
         self.render_state.as_mut().unwrap().camera_uniform.set_view_projection(view_projection);
-        let update_time_str = format!("update: {:.2}ms \n", self.update_time_average / 1000.0);
-        let render_time_str = format!("render: {:.2}ms \n", self.render_time_average / 1000.0);
-        self.render_state.as_mut().unwrap().text_section.text = vec![
-            OwnedText::new(update_time_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
-            OwnedText::new(render_time_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
-        ];
+        if self.frame_count % 20 == 0 {
+            let fps_str = format!("{:.2} fps \n", 1.0 / self.frame_delta.get_average());
+            let update_time_str = format!("update: {:.2}ms \n", self.update_time.get_average());
+            let render_time_str = match self.render_state.as_ref().unwrap().timestamp_query_state.as_ref() {
+                Some(qs) => {
+                    let render_measurement_ns = qs.last_render_measurement_ns.load(Ordering::Relaxed);
+                    let render_time_ms = (self.render_state.as_ref().unwrap().queue.get_timestamp_period() as f64 * render_measurement_ns as f64) / 1000000.0;
+                    format!("render: {:.2}ms \n", render_time_ms)
+                },
+                None => "n/a".to_string(),
+            };
+            self.render_state.as_mut().unwrap().text_section.text = vec![
+                OwnedText::new(fps_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
+                OwnedText::new(update_time_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
+                OwnedText::new(render_time_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
+            ];
+        }
         self.render_state.as_mut().unwrap().write_buffers();
+        self.frame_count += 1;
     }
 
     fn render(&mut self) {
@@ -366,12 +461,15 @@ impl ApplicationHandler for App<'_> {
                 }
             },
             WindowEvent::RedrawRequested => {
+                let frame_delta = self.last_frame.elapsed().as_secs_f64();
+                self.frame_delta.add_sample(frame_delta);
+                self.last_frame = Instant::now();
+
                 let pre_update = Instant::now();
                 self.update();
-                self.update_time_average = self.update_time_average * 0.99 + pre_update.elapsed().as_micros() as f64 * 0.01;
-                let pre_render = Instant::now();
+                self.update_time.add_sample(pre_update.elapsed().as_micros() as f64 / 1000.0);
+
                 self.render();
-                self.render_time_average = self.render_time_average * 0.99 + pre_render.elapsed().as_micros() as f64 * 0.01;
                 self.render_state.as_ref().unwrap().window.request_redraw();
             }
             _ => (),
