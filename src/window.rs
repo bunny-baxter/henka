@@ -376,7 +376,7 @@ struct App<'a> {
     update_time: MovingAverage,
 }
 
-impl App<'_> {
+impl<'a> App<'a> {
     fn new() -> Self {
         App {
             frame_count: 0,
@@ -389,8 +389,16 @@ impl App<'_> {
         }
     }
 
+    fn render_state(&self) -> &RenderState<'a> {
+        self.render_state.as_ref().unwrap()
+    }
+
+    fn render_state_mut(&mut self) -> &mut RenderState<'a> {
+        self.render_state.as_mut().unwrap()
+    }
+
     fn get_window_size(&self) -> Vector2<u32> {
-        let render_state = self.render_state.as_ref().unwrap();
+        let render_state = self.render_state();
         return vec2(render_state.config.width, render_state.config.height);
     }
 
@@ -408,31 +416,31 @@ impl App<'_> {
     fn update(&mut self) {
         self.game_state.update(&self.input_state);
         let view_projection = self.game_state.camera.build_view_projection_matrix();
-        self.render_state.as_mut().unwrap().camera_uniform.set_view_projection(view_projection);
+        self.render_state_mut().camera_uniform.set_view_projection(view_projection);
         if self.frame_count % 20 == 0 {
             let fps_str = format!("{:.2} fps \n", 1.0 / self.frame_delta.get_average());
             let update_time_str = format!("update: {:.2}ms \n", self.update_time.get_average());
-            let render_time_str = match self.render_state.as_ref().unwrap().timestamp_query_state.as_ref() {
+            let render_time_str = match self.render_state().timestamp_query_state.as_ref() {
                 Some(qs) => {
                     let render_measurement_ns = qs.last_render_measurement_ns.load(Ordering::Relaxed);
-                    let render_time_ms = (self.render_state.as_ref().unwrap().queue.get_timestamp_period() as f64 * render_measurement_ns as f64) / 1000000.0;
+                    let render_time_ms = (self.render_state().queue.get_timestamp_period() as f64 * render_measurement_ns as f64) / 1000000.0;
                     format!("render: {:.2}ms \n", render_time_ms)
                 },
                 None => "n/a".to_string(),
             };
-            self.render_state.as_mut().unwrap().text_section.text = vec![
+            self.render_state_mut().text_section.text = vec![
                 OwnedText::new(fps_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
                 OwnedText::new(update_time_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
                 OwnedText::new(render_time_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
             ];
         }
-        self.render_state.as_mut().unwrap().write_buffers();
+        self.render_state_mut().write_buffers();
         self.frame_count += 1;
     }
 
     fn render(&mut self) {
         let vertices = self.game_state.get_vertices();
-        self.render_state.as_mut().unwrap().render(&vertices).unwrap();
+        self.render_state_mut().render(&vertices).unwrap();
     }
 }
 
@@ -470,7 +478,7 @@ impl ApplicationHandler for App<'_> {
                 self.update_time.add_sample(pre_update.elapsed().as_micros() as f64 / 1000.0);
 
                 self.render();
-                self.render_state.as_ref().unwrap().window.request_redraw();
+                self.render_state().window.request_redraw();
             }
             _ => (),
         }
