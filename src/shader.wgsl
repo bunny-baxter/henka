@@ -1,5 +1,8 @@
 // Vertex shader
 
+const FACE_COLOR: vec3<f32> = vec3(1.0, 0.81568627, 0.50196078);
+const LIGHT_DIRECTION: vec3<f32> = vec3(0.18814417, -0.94072087, 0.28221626);
+
 struct CameraUniform {
     view_projection: mat4x4<f32>,
 };
@@ -23,7 +26,8 @@ fn vs_main(
 ) -> VertexOutput {
     var out: VertexOutput;
     out.clip_position = camera.view_projection * vec4<f32>(model.position, 1.0);
-    out.color = vec3(abs(model.normal.x), abs(model.normal.y), abs(model.normal.z));
+    var light_mag = abs(dot(model.normal, LIGHT_DIRECTION));
+    out.color = FACE_COLOR * light_mag;
     return out;
 }
 

@@ -428,9 +428,9 @@ impl<'a> App<'a> {
                 None => "n/a".to_string(),
             };
             self.render_state_mut().text_section.text = vec![
-                OwnedText::new(fps_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
-                OwnedText::new(update_time_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
-                OwnedText::new(render_time_str).with_scale(64.0).with_color([1.0, 1.0, 0.0, 1.0]),
+                OwnedText::new(fps_str).with_scale(32.0).with_color([1.0, 1.0, 0.0, 1.0]),
+                OwnedText::new(update_time_str).with_scale(32.0).with_color([1.0, 1.0, 0.0, 1.0]),
+                OwnedText::new(render_time_str).with_scale(32.0).with_color([1.0, 1.0, 0.0, 1.0]),
             ];
         }
         self.render_state_mut().write_buffers();

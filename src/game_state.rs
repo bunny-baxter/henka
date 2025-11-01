@@ -174,6 +174,17 @@ impl GameState {
             }
         }
         self.chunk.set_voxel(vec3(4, 4, 4), 1);
+
+        self.chunk.set_voxel(vec3(12, 3, 12), 1);
+        self.chunk.set_voxel(vec3(13, 3, 12), 1);
+        self.chunk.set_voxel(vec3(14, 3, 12), 1);
+        self.chunk.set_voxel(vec3(12, 3, 13), 1);
+        self.chunk.set_voxel(vec3(13, 3, 13), 1);
+        self.chunk.set_voxel(vec3(14, 3, 13), 1);
+        self.chunk.set_voxel(vec3(12, 3, 14), 1);
+        self.chunk.set_voxel(vec3(13, 3, 14), 1);
+        self.chunk.set_voxel(vec3(14, 3, 14), 1);
+        self.chunk.set_voxel(vec3(13, 4, 13), 1);
     }
 
     pub fn on_key_pressed(&mut self, key_code: KeyCode) {
