@@ -15,9 +15,8 @@ use wgpu_text::{glyph_brush::{Section as TextSection, OwnedText, ab_glyph::FontR
 
 use crate::camera::CameraUniform;
 use crate::game_state::GameState;
-use crate::render_util::MovingAverage;
+use crate::render_util::{MovingAverage, Vertex};
 use crate::texture::DepthTexture;
-use crate::voxel::Vertex;
 
 struct TimestampQueryState {
     query_set: wgpu::QuerySet,

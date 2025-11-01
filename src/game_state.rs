@@ -2,9 +2,10 @@ use cgmath::{InnerSpace, Point3, point3, Vector2, vec2, Vector3, vec3};
 use fixed::types::I24F8;
 use winit::keyboard::KeyCode;
 
-use crate::voxel::{CHUNK_SIZE, VoxelChunk, Vertex};
+use crate::voxel::{CHUNK_SIZE, VoxelChunk};
 use crate::camera::Camera;
 use crate::window::InputState;
+use crate::render_util::Vertex;
 
 struct FirstPersonCameraController {
     pitch: f32,
@@ -59,49 +60,69 @@ fn create_pyramid_mesh(offset: Point3<f32>, base_size: f32, height: f32) -> Vec<
     const YELLOW: [f32; 3] = [1.0, 1.0, 0.0];
     let half_base = base_size / 2.0;
 
-    // Define the 5 unique vertices of the pyramid
-    // Apex (top point)
-    let apex = Vertex {
-        position: [offset.x, offset.y + height, offset.z],
-        color: YELLOW,
-        uv: [0.5, 0.5],
-    };
-    // Base vertices (counter-clockwise when viewed from above)
-    let base_v0 = Vertex {
-        position: [offset.x - half_base, offset.y, offset.z - half_base],
-        color: YELLOW,
-        uv: [0.0, 0.0],
-    };
-    let base_v1 = Vertex {
-        position: [offset.x + half_base, offset.y, offset.z - half_base],
-        color: YELLOW,
-        uv: [1.0, 0.0],
-    };
-    let base_v2 = Vertex {
-        position: [offset.x + half_base, offset.y, offset.z + half_base],
-        color: YELLOW,
-        uv: [1.0, 1.0],
-    };
-    let base_v3 = Vertex {
-        position: [offset.x - half_base, offset.y, offset.z + half_base],
-        color: YELLOW,
-        uv: [0.0, 1.0],
+    // Helper function to calculate face normal from three vertices
+    let calc_normal = |p0: [f32; 3], p1: [f32; 3], p2: [f32; 3]| -> [f32; 3] {
+        let edge1 = vec3(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]);
+        let edge2 = vec3(p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]);
+        let normal = edge1.cross(edge2).normalize();
+        [normal.x, normal.y, normal.z]
     };
 
-    // Create triangles for the pyramid
+    // Define the 5 vertex positions
+    let apex_pos = [offset.x, offset.y + height, offset.z];
+    let base_v0_pos = [offset.x - half_base, offset.y, offset.z - half_base];
+    let base_v1_pos = [offset.x + half_base, offset.y, offset.z - half_base];
+    let base_v2_pos = [offset.x + half_base, offset.y, offset.z + half_base];
+    let base_v3_pos = [offset.x - half_base, offset.y, offset.z + half_base];
+
+    // Create triangles for the pyramid with correct face normals
     // 4 triangular faces + 2 triangles for the square base = 18 vertices total
+
+    // Front face
+    let front_normal = calc_normal(base_v0_pos, apex_pos, base_v1_pos);
+    let front_v0 = Vertex { position: base_v0_pos, color: YELLOW, uv: [0.0, 0.0], normal: front_normal };
+    let front_apex = Vertex { position: apex_pos, color: YELLOW, uv: [0.5, 0.5], normal: front_normal };
+    let front_v1 = Vertex { position: base_v1_pos, color: YELLOW, uv: [1.0, 0.0], normal: front_normal };
+
+    // Right face
+    let right_normal = calc_normal(base_v1_pos, apex_pos, base_v2_pos);
+    let right_v1 = Vertex { position: base_v1_pos, color: YELLOW, uv: [0.0, 0.0], normal: right_normal };
+    let right_apex = Vertex { position: apex_pos, color: YELLOW, uv: [0.5, 0.5], normal: right_normal };
+    let right_v2 = Vertex { position: base_v2_pos, color: YELLOW, uv: [1.0, 0.0], normal: right_normal };
+
+    // Back face
+    let back_normal = calc_normal(base_v2_pos, apex_pos, base_v3_pos);
+    let back_v2 = Vertex { position: base_v2_pos, color: YELLOW, uv: [0.0, 0.0], normal: back_normal };
+    let back_apex = Vertex { position: apex_pos, color: YELLOW, uv: [0.5, 0.5], normal: back_normal };
+    let back_v3 = Vertex { position: base_v3_pos, color: YELLOW, uv: [1.0, 0.0], normal: back_normal };
+
+    // Left face
+    let left_normal = calc_normal(base_v3_pos, apex_pos, base_v0_pos);
+    let left_v3 = Vertex { position: base_v3_pos, color: YELLOW, uv: [0.0, 0.0], normal: left_normal };
+    let left_apex = Vertex { position: apex_pos, color: YELLOW, uv: [0.5, 0.5], normal: left_normal };
+    let left_v0 = Vertex { position: base_v0_pos, color: YELLOW, uv: [1.0, 0.0], normal: left_normal };
+
+    // Base (two triangles) - normal points downward
+    let base_normal = calc_normal(base_v0_pos, base_v1_pos, base_v2_pos);
+    let base1_v0 = Vertex { position: base_v0_pos, color: YELLOW, uv: [0.0, 0.0], normal: base_normal };
+    let base1_v1 = Vertex { position: base_v1_pos, color: YELLOW, uv: [1.0, 0.0], normal: base_normal };
+    let base1_v2 = Vertex { position: base_v2_pos, color: YELLOW, uv: [1.0, 1.0], normal: base_normal };
+    let base2_v0 = Vertex { position: base_v0_pos, color: YELLOW, uv: [0.0, 0.0], normal: base_normal };
+    let base2_v2 = Vertex { position: base_v2_pos, color: YELLOW, uv: [1.0, 1.0], normal: base_normal };
+    let base2_v3 = Vertex { position: base_v3_pos, color: YELLOW, uv: [0.0, 1.0], normal: base_normal };
+
     vec![
         // Front face
-        base_v0, apex, base_v1,
+        front_v0, front_apex, front_v1,
         // Right face
-        base_v1, apex, base_v2,
+        right_v1, right_apex, right_v2,
         // Back face
-        base_v2, apex, base_v3,
+        back_v2, back_apex, back_v3,
         // Left face
-        base_v3, apex, base_v0,
+        left_v3, left_apex, left_v0,
         // Base (two triangles)
-        base_v0, base_v1, base_v2,
-        base_v0, base_v2, base_v3,
+        base1_v0, base1_v1, base1_v2,
+        base2_v0, base2_v2, base2_v3,
     ]
 }
 
