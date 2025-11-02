@@ -1,5 +1,6 @@
 mod array_3d;
 mod camera;
+mod fixed_point;
 mod game_state;
 mod render_util;
 mod texture;
