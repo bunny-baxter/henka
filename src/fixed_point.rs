@@ -1,3 +1,4 @@
+use std::fmt;
 use std::ops;
 
 use cgmath::Vector3;
@@ -7,7 +8,7 @@ const WHOLE_BITS: u32 = 23;
 
 pub const DENOMINATOR: u32 = 2u32.pow(FRACTION_BITS);
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct Fixed(u32);
 
 impl Fixed {
@@ -47,6 +48,13 @@ impl Fixed {
     pub fn to_f32(&self) -> f32 {
         let (whole, fraction) = self.unpack();
         whole as f32 + (fraction as f32 / DENOMINATOR as f32)
+    }
+}
+
+impl fmt::Debug for Fixed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (whole, fraction) = self.unpack();
+        write!(f, "Fixed({}, {})", whole, fraction)
     }
 }
 
@@ -163,5 +171,12 @@ mod tests {
         assert_eq!(1.5, v_f32.x);
         assert_eq!(2.25, v_f32.y);
         assert_eq!(3.75, v_f32.z);
+    }
+
+    #[test]
+    fn debug_format() {
+        assert_eq!("Fixed(2, 128)", format!("{:?}", Fixed::new(2, 128)));
+        assert_eq!("Fixed(-6, 5)", format!("{:?}", Fixed::new(-6, 5)));
+        assert_eq!("Fixed(0, 0)", format!("{:?}", Fixed::ZERO));
     }
 }
