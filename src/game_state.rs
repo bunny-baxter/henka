@@ -1,11 +1,11 @@
 use cgmath::{InnerSpace, Point3, point3, Vector2, vec2, Vector3, vec3};
-use fixed::types::I24F8;
 use winit::keyboard::KeyCode;
 
-use crate::voxel::{CHUNK_SIZE, VoxelChunk};
 use crate::camera::Camera;
-use crate::window::InputState;
+use crate::fixed_point::Fixed;
 use crate::render_util::Vertex;
+use crate::voxel::{CHUNK_SIZE, VoxelChunk};
+use crate::window::InputState;
 
 struct FirstPersonCameraController {
     pitch: f32,
@@ -44,13 +44,13 @@ impl OrbitCameraController {
 }
 
 pub struct PlayerActor {
-    pub position: Point3<I24F8>,
+    pub position: Point3<Fixed>,
 }
 
 impl PlayerActor {
     fn new() -> Self {
         PlayerActor {
-            position: point3(I24F8::from_num(0), I24F8::from_num(0), I24F8::from_num(0)),
+            position: point3(Fixed::ZERO, Fixed::ZERO, Fixed::ZERO),
         }
     }
 }
@@ -140,7 +140,7 @@ pub struct GameState {
 impl GameState {
     pub fn new() -> Self {
         let mut player = PlayerActor::new();
-        player.position = point3(I24F8::from_num(1.0), I24F8::from_num(1.5), I24F8::from_num(0.0));
+        player.position = point3(Fixed::from_f32(1.0), Fixed::from_f32(1.5), Fixed::from_f32(0.0));
         GameState {
             exit: false,
             window_size: vec2(0, 0),
@@ -197,25 +197,25 @@ impl GameState {
 
     pub fn update(&mut self, input_state: &InputState) {
         if self.is_camera_first_person {
-            let forward = self.first_person_camera_controller.get_forward();
-            let forward_fixed = forward.map(|i| I24F8::from_num(i * 0.01));
+            let forward = self.first_person_camera_controller.get_forward().normalize();
+            let forward_velocity = Fixed::vector3_from_f32(forward * 0.01);
             let right = forward.cross(cgmath::Vector3::unit_y()).normalize();
-            let right_fixed = right.map(|i| I24F8::from_num(i * 0.01));
+            let right_velocity = Fixed::vector3_from_f32(right * 0.01);
             if input_state.is_key_pressed(KeyCode::KeyW) {
-                self.player.position.x += forward_fixed.x;
-                self.player.position.z += forward_fixed.z;
+                self.player.position.x += forward_velocity.x;
+                self.player.position.z += forward_velocity.z;
             }
             if input_state.is_key_pressed(KeyCode::KeyS) {
-                self.player.position.x -= forward_fixed.x;
-                self.player.position.z -= forward_fixed.z;
+                self.player.position.x -= forward_velocity.x;
+                self.player.position.z -= forward_velocity.z;
             }
             if input_state.is_key_pressed(KeyCode::KeyD) {
-                self.player.position.x += right_fixed.x;
-                self.player.position.z += right_fixed.z;
+                self.player.position.x += right_velocity.x;
+                self.player.position.z += right_velocity.z;
             }
             if input_state.is_key_pressed(KeyCode::KeyA) {
-                self.player.position.x -= right_fixed.x;
-                self.player.position.z -= right_fixed.z;
+                self.player.position.x -= right_velocity.x;
+                self.player.position.z -= right_velocity.z;
             }
             if input_state.is_key_pressed(KeyCode::ArrowUp) {
                 self.first_person_camera_controller.pitch += 0.01;
@@ -229,7 +229,7 @@ impl GameState {
             if input_state.is_key_pressed(KeyCode::ArrowLeft) {
                 self.first_person_camera_controller.yaw -= 0.01;
             }
-            self.camera.position = self.player.position.map(|i| i.to_num::<f32>());
+            self.camera.position = Fixed::point3_to_f32(self.player.position);
             self.camera.position.y += 0.4;
             self.camera.target = self.first_person_camera_controller.get_camera_target(&self.camera.position);
         } else {
@@ -254,7 +254,7 @@ impl GameState {
             if input_state.is_key_pressed(KeyCode::KeyK) {
                 self.orbit_camera_controller.height += 0.05;
             }
-            self.camera.target = self.player.position.map(|i| i.to_num::<f32>());
+            self.camera.target = Fixed::point3_to_f32(self.player.position);
             self.camera.position = self.orbit_camera_controller.get_camera_position(&self.camera.target);
         }
     }
@@ -262,8 +262,7 @@ impl GameState {
     pub fn get_vertices(&self) -> Vec<Vertex> {
         let mut vertices = vec![];
         vertices.append(&mut self.chunk.get_vertices().clone());
-        let player_position_f32 = self.player.position.map(|i| i.to_num::<f32>());
-        vertices.append(&mut create_pyramid_mesh(player_position_f32, 0.25, 0.5));
+        vertices.append(&mut create_pyramid_mesh(Fixed::point3_to_f32(self.player.position), 0.25, 0.5));
         vertices
     }
 }
