@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops;
 
-use cgmath::{Point3, Vector3};
+use cgmath::{point3, Point3, vec3, Vector3};
 
 const FRACTION_BITS: u32 = 8;
 const WHOLE_BITS: u32 = 23;
@@ -47,6 +47,9 @@ impl Fixed {
     pub const ZERO: Fixed = Fixed(0);
     pub const EPSILON: Fixed = Fixed(1);
 
+    pub const ZERO_POINT: Point3<Fixed> = point3(Self::ZERO, Self::ZERO, Self::ZERO);
+    pub const ZERO_VECTOR: Vector3<Fixed> = vec3(Self::ZERO, Self::ZERO, Self::ZERO);
+
     pub fn new(whole: i32, fraction: u32) -> Self {
         Self::from_parts(whole < 0, whole.abs() as u32, fraction)
     }
@@ -81,15 +84,23 @@ impl Fixed {
     }
 
     pub fn unpack(&self) -> (bool, u32, u32) {
-        let negative = (0x80000000 & self.0) > 0;
         let whole = (0x7fffff00 & self.0) >> FRACTION_BITS;
         let fraction = 0xff & self.0;
-        (negative, whole, fraction)
+        (self.is_negative(), whole, fraction)
+    }
+
+    pub fn is_negative(&self) -> bool {
+        (self.0 & 0x80000000) > 0
     }
 
     pub fn to_f32(&self) -> f32 {
         let (negative, whole, fraction) = self.unpack();
         (whole as f32 + (fraction as f32 / DENOMINATOR as f32)) * if negative { -1.0 } else { 1.0 }
+    }
+
+    pub fn epsilons(&self) -> u32 {
+        let (_negative, whole, fraction) = self.unpack();
+        whole * DENOMINATOR + fraction
     }
 }
 
@@ -283,5 +294,23 @@ mod tests {
         assert_eq!(Fixed::new(5, 0), -Fixed::new(-5, 0));
         assert_eq!(Fixed::new(-2, 128), -Fixed::new(2, 128));
         assert_eq!(Fixed::new(0, 0), -Fixed::ZERO);
+    }
+
+    #[test]
+    fn is_negative() {
+        assert_eq!(false, Fixed::ZERO.is_negative());
+        assert_eq!(false, Fixed::new(1, 0).is_negative());
+        assert_eq!(true, Fixed::new(-1, 0).is_negative());
+        assert_eq!(true, (-Fixed::new(0, 64)).is_negative());
+        assert_eq!(false, (-Fixed::ZERO).is_negative());
+    }
+
+    #[test]
+    fn epsilons() {
+        assert_eq!(0, Fixed::ZERO.epsilons());
+        assert_eq!(1, Fixed::EPSILON.epsilons());
+        assert_eq!(DENOMINATOR, Fixed::new(1, 0).epsilons());
+        assert_eq!(DENOMINATOR, Fixed::new(-1, 0).epsilons());
+        assert_eq!(2 * DENOMINATOR + 64, Fixed::new(2, 64).epsilons());
     }
 }

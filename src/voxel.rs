@@ -98,7 +98,7 @@ fn create_cube_mesh(offset: Vector3<f32>, size: Vector3<f32>, face_description: 
 
 pub const CHUNK_SIZE: Vector3<usize> = vec3(32, 32, 32);
 
-const VOXEL_SIZE: Vector3<f32> = vec3(0.5, 0.5, 0.5);
+pub const VOXEL_SIZE: Vector3<f32> = vec3(0.5, 0.5, 0.5);
 
 pub struct VoxelChunk {
     voxels: Array3D,
@@ -115,6 +115,10 @@ impl VoxelChunk {
 
     fn clear_cached_vertices(&mut self) {
         *self.cached_vertices.borrow_mut() = None;
+    }
+
+    pub fn get_voxel(&self, coord: Vector3<usize>) -> i32 {
+        self.voxels.get(coord)
     }
 
     pub fn set_voxel(&mut self, coord: Vector3<usize>, value: i32) {
