@@ -7,6 +7,7 @@ pub struct PhysicsBody {
     pub position: Point3<Fixed>,
     pub velocity: Vector3<Fixed>,
     pub collision_size: Vector3<Fixed>,
+    pub is_on_ground: bool,
 }
 
 impl PhysicsBody {
@@ -15,6 +16,7 @@ impl PhysicsBody {
             position: Fixed::ZERO_POINT,
             velocity: Fixed::ZERO_VECTOR,
             collision_size: Fixed::ZERO_VECTOR,
+            is_on_ground: false,
         }
     }
 
@@ -85,6 +87,7 @@ fn is_body_colliding_with_voxels(body: &PhysicsBody, voxels: &VoxelChunk) -> boo
 
 pub fn physics_tick(config: &PhysicsConfig, bodies: &mut [PhysicsBody], voxels: &VoxelChunk) {
     for body in bodies.iter_mut() {
+        body.is_on_ground = false;
         body.velocity = add_vec_to_vec(body.velocity, config.gravity);
         for _x in 0..body.velocity.x.epsilons() {
             let previous = body.position.x;
@@ -101,6 +104,7 @@ pub fn physics_tick(config: &PhysicsConfig, bodies: &mut [PhysicsBody], voxels: 
             if is_body_colliding_with_voxels(body, voxels) {
                 body.position.y = previous;
                 body.velocity.y = Fixed::ZERO;
+                body.is_on_ground = true;
                 break;
             }
         }
@@ -178,8 +182,6 @@ mod tests {
 
     #[test]
     fn run_off_an_edge() {
-        // TODO: make sure velocity is set to 0 when colliding, otherwise gravity will continue to
-        // build up every frame while on the ground
         let config = PhysicsConfig { gravity: vec3(Fixed::ZERO, -Fixed::new(0, 64), Fixed::ZERO) };
         let mut bodies = vec![ PhysicsBody::new() ];
         let mut voxel_chunk = VoxelChunk::new();

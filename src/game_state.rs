@@ -8,6 +8,8 @@ use crate::physics_world::{PhysicsBody, PhysicsConfig, physics_tick};
 use crate::voxel::{CHUNK_SIZE, VoxelChunk, VOXEL_SIZE};
 use crate::window::InputState;
 
+const PHYSICS_SECONDS_PER_TICK: f64 = 1.0 / 60.0;
+
 struct FirstPersonCameraController {
     pitch: f32,
     yaw: f32,
@@ -135,6 +137,7 @@ pub struct GameState {
     first_person_camera_controller: FirstPersonCameraController,
     orbit_camera_controller: OrbitCameraController,
     is_camera_first_person: bool,
+    physics_tick_accumulator: f64,
     physics_config: PhysicsConfig,
     pub player: PlayerActor,
 }
@@ -159,7 +162,8 @@ impl GameState {
                 height: 0.6,
             },
             is_camera_first_person: true,
-            physics_config: PhysicsConfig { gravity: vec3(Fixed::ZERO, -Fixed::new(0, 2), Fixed::ZERO) },
+            physics_tick_accumulator: 0.0,
+            physics_config: PhysicsConfig { gravity: vec3(Fixed::ZERO, -Fixed::new(0, 3), Fixed::ZERO) },
             player,
         }
     }
@@ -179,6 +183,10 @@ impl GameState {
         }
         self.chunk.set_voxel(vec3(4, 4, 4), 1);
 
+        self.chunk.set_voxel(vec3(3, 3, 2), 1);
+        self.chunk.set_voxel(vec3(4, 3, 2), 1);
+        self.chunk.set_voxel(vec3(4, 4, 2), 1);
+
         self.chunk.set_voxel(vec3(12, 3, 12), 1);
         self.chunk.set_voxel(vec3(13, 3, 12), 1);
         self.chunk.set_voxel(vec3(14, 3, 12), 1);
@@ -195,36 +203,43 @@ impl GameState {
         match key_code {
             KeyCode::KeyQ => self.exit = true,
             KeyCode::KeyC => self.is_camera_first_person = !self.is_camera_first_person,
+            KeyCode::Space => if self.player.body.is_on_ground {
+                self.player.body.velocity.y = Fixed::new(0, 48);
+            },
             _ => (),
         };
     }
 
-    pub fn update(&mut self, input_state: &InputState) {
-        const PLAYER_SPEED: f32 = 0.05;
-        let forward = self.first_person_camera_controller.get_forward();
-        let forward_xz = vec3(forward.x, 0.0, forward.z).normalize();
-        let forward_velocity = Fixed::vector3_from_f32(forward_xz * PLAYER_SPEED);
-        let right = forward_xz.cross(cgmath::Vector3::unit_y()).normalize();
-        let right_velocity = Fixed::vector3_from_f32(right * PLAYER_SPEED);
-        self.player.body.velocity.x = Fixed::ZERO;
-        self.player.body.velocity.z = Fixed::ZERO;
-        if input_state.is_key_pressed(KeyCode::KeyW) {
-            self.player.body.velocity.x += forward_velocity.x;
-            self.player.body.velocity.z += forward_velocity.z;
+    pub fn update(&mut self, dt: f64, input_state: &InputState) {
+        self.physics_tick_accumulator += dt;
+        while self.physics_tick_accumulator > PHYSICS_SECONDS_PER_TICK {
+            const PLAYER_SPEED: f32 = 0.05;
+            let forward = self.first_person_camera_controller.get_forward();
+            let forward_xz = vec3(forward.x, 0.0, forward.z).normalize();
+            let forward_velocity = Fixed::vector3_from_f32(forward_xz * PLAYER_SPEED);
+            let right = forward_xz.cross(cgmath::Vector3::unit_y()).normalize();
+            let right_velocity = Fixed::vector3_from_f32(right * PLAYER_SPEED);
+            self.player.body.velocity.x = Fixed::ZERO;
+            self.player.body.velocity.z = Fixed::ZERO;
+            if input_state.is_key_pressed(KeyCode::KeyW) {
+                self.player.body.velocity.x += forward_velocity.x;
+                self.player.body.velocity.z += forward_velocity.z;
+            }
+            if input_state.is_key_pressed(KeyCode::KeyS) {
+                self.player.body.velocity.x -= forward_velocity.x;
+                self.player.body.velocity.z -= forward_velocity.z;
+            }
+            if input_state.is_key_pressed(KeyCode::KeyD) {
+                self.player.body.velocity.x += right_velocity.x;
+                self.player.body.velocity.z += right_velocity.z;
+            }
+            if input_state.is_key_pressed(KeyCode::KeyA) {
+                self.player.body.velocity.x -= right_velocity.x;
+                self.player.body.velocity.z -= right_velocity.z;
+            }
+            physics_tick(&self.physics_config, std::slice::from_mut(&mut self.player.body), &self.chunk);
+            self.physics_tick_accumulator -= PHYSICS_SECONDS_PER_TICK;
         }
-        if input_state.is_key_pressed(KeyCode::KeyS) {
-            self.player.body.velocity.x -= forward_velocity.x;
-            self.player.body.velocity.z -= forward_velocity.z;
-        }
-        if input_state.is_key_pressed(KeyCode::KeyD) {
-            self.player.body.velocity.x += right_velocity.x;
-            self.player.body.velocity.z += right_velocity.z;
-        }
-        if input_state.is_key_pressed(KeyCode::KeyA) {
-            self.player.body.velocity.x -= right_velocity.x;
-            self.player.body.velocity.z -= right_velocity.z;
-        }
-        physics_tick(&self.physics_config, std::slice::from_mut(&mut self.player.body), &self.chunk);
 
         if self.is_camera_first_person {
             if input_state.is_key_pressed(KeyCode::ArrowUp) {
@@ -239,8 +254,9 @@ impl GameState {
             if input_state.is_key_pressed(KeyCode::ArrowLeft) {
                 self.first_person_camera_controller.yaw -= 0.01;
             }
-            self.camera.position = Fixed::point3_to_f32(self.player.body.position) * VOXEL_SIZE.x;
-            self.camera.position.y += 0.4;
+            // TODO: Adjust camera z planes and player hitbox so camera doesn't clip into walls
+            // when you walk up to them
+            self.camera.position = (Fixed::point3_to_f32(self.player.body.position) + vec3(0.0, 1.2, 0.0)) * VOXEL_SIZE.x;
             self.camera.target = self.first_person_camera_controller.get_camera_target(&self.camera.position);
         } else {
             if input_state.is_key_pressed(KeyCode::ArrowUp) {

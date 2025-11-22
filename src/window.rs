@@ -412,8 +412,8 @@ impl<'a> App<'a> {
         self.game_state.generate_voxels();
     }
 
-    fn update(&mut self) {
-        self.game_state.update(&self.input_state);
+    fn update(&mut self, dt: f64) {
+        self.game_state.update(dt, &self.input_state);
         let view_projection = self.game_state.camera.build_view_projection_matrix();
         self.render_state_mut().camera_uniform.set_view_projection(view_projection);
         if self.frame_count % 20 == 0 {
@@ -473,7 +473,7 @@ impl ApplicationHandler for App<'_> {
                 self.last_frame = Instant::now();
 
                 let pre_update = Instant::now();
-                self.update();
+                self.update(frame_delta);
                 self.update_time.add_sample(pre_update.elapsed().as_micros() as f64 / 1000.0);
 
                 self.render();
