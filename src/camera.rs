@@ -18,7 +18,7 @@ impl Camera {
             up: cgmath::Vector3::unit_y(),
             aspect_ratio: aspect_ratio,
             fov_y: 65.0,
-            z_near: 0.1,
+            z_near: 0.01,
             z_far: 100.0,
         }
     }

@@ -56,6 +56,18 @@ impl PlayerActor {
             body: PhysicsBody::new(),
         }
     }
+
+    fn get_center_f32(&self) -> Point3<f32> {
+        let pos = Fixed::point3_to_f32(self.body.position);
+        let half_size = Fixed::vector3_to_f32(self.body.collision_size) * 0.5;
+        point3(pos.x + half_size.x, pos.y + half_size.y, pos.z + half_size.z)
+    }
+
+    fn get_center_base_f32(&self) -> Point3<f32> {
+        let pos = Fixed::point3_to_f32(self.body.position);
+        let half_size = Fixed::vector3_to_f32(self.body.collision_size) * 0.5;
+        point3(pos.x + half_size.x, pos.y, pos.z + half_size.z)
+    }
 }
 
 // Function written by Claude, cleaned up by me
@@ -254,9 +266,9 @@ impl GameState {
             if input_state.is_key_pressed(KeyCode::ArrowLeft) {
                 self.first_person_camera_controller.yaw -= 0.01;
             }
-            // TODO: Adjust camera z planes and player hitbox so camera doesn't clip into walls
-            // when you walk up to them
-            self.camera.position = (Fixed::point3_to_f32(self.player.body.position) + vec3(0.0, 1.2, 0.0)) * VOXEL_SIZE.x;
+            let player_center_base = self.player.get_center_base_f32();
+            let eye_height = Fixed::vector3_to_f32(self.player.body.collision_size).y * 0.9; // Eye level near top of hitbox
+            self.camera.position = (player_center_base + vec3(0.0, eye_height, 0.0)) * VOXEL_SIZE.x;
             self.camera.target = self.first_person_camera_controller.get_camera_target(&self.camera.position);
         } else {
             if input_state.is_key_pressed(KeyCode::ArrowUp) {
@@ -280,7 +292,8 @@ impl GameState {
             if input_state.is_key_pressed(KeyCode::KeyK) {
                 self.orbit_camera_controller.height += 0.05;
             }
-            self.camera.target = Fixed::point3_to_f32(self.player.body.position) * VOXEL_SIZE.x;
+            // Center the camera target on the player's hitbox
+            self.camera.target = self.player.get_center_f32() * VOXEL_SIZE.x;
             self.camera.position = self.orbit_camera_controller.get_camera_position(&self.camera.target);
         }
     }
@@ -288,7 +301,8 @@ impl GameState {
     pub fn get_vertices(&self) -> Vec<Vertex> {
         let mut vertices = vec![];
         vertices.append(&mut self.chunk.get_vertices().clone());
-        vertices.append(&mut create_pyramid_mesh(Fixed::point3_to_f32(self.player.body.position) * VOXEL_SIZE.x, 0.25, 0.5));
+        // Center the player model on the hitbox base
+        vertices.append(&mut create_pyramid_mesh(self.player.get_center_base_f32() * VOXEL_SIZE.x, 0.25, 0.5));
         vertices
     }
 }
