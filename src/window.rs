@@ -16,7 +16,7 @@ use wgpu_text::{glyph_brush::{Section as TextSection, OwnedText, ab_glyph::FontR
 use crate::camera::CameraUniform;
 use crate::game_state::GameState;
 use crate::render_util::{MovingAverage, Vertex};
-use crate::texture::DepthTexture;
+use crate::texture::{DepthTexture, Texture};
 
 struct TimestampQueryState {
     query_set: wgpu::QuerySet,
@@ -37,6 +37,9 @@ struct RenderState<'a> {
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    #[allow(unused)]
+    voxel_texture: Texture,
+    texture_bind_group: wgpu::BindGroup,
     #[allow(unused)]
     font: &'a [u8],
     text_brush: TextBrush<FontRef<'a>>,
@@ -133,6 +136,46 @@ impl RenderState<'_> {
             label: Some("camera_bind_group"),
         });
 
+        let voxel_texture_bytes = include_bytes!("../textures/noise_128.png");
+        let voxel_texture = Texture::from_bytes(&device, &queue, voxel_texture_bytes, "voxel_texture").unwrap();
+
+        let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+            ],
+            label: Some("texture_bind_group_layout"),
+        });
+
+        let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(&voxel_texture.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&voxel_texture.view),
+                },
+            ],
+            label: Some("texture_bind_group"),
+        });
+
         let depth_stencil_state = wgpu::DepthStencilState {
             format: DepthTexture::DEPTH_FORMAT,
             depth_write_enabled: true,
@@ -182,7 +225,7 @@ impl RenderState<'_> {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&camera_bind_group_layout],
+                bind_group_layouts: &[&camera_bind_group_layout, &texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -235,6 +278,8 @@ impl RenderState<'_> {
             camera_uniform,
             camera_buffer,
             camera_bind_group,
+            voxel_texture,
+            texture_bind_group,
             font,
             text_brush,
             text_section,
@@ -292,6 +337,7 @@ impl RenderState<'_> {
             });
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
 
             let n_vertices = vertices.len() as u32;

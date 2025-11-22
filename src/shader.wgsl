@@ -8,15 +8,20 @@ struct CameraUniform {
 };
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
 
+@group(1) @binding(0) var texture_sampler: sampler;
+@group(1) @binding(1) var texture_view: texture_2d<f32>;
+
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) color: vec3<f32>,
     @location(2) normal: vec3<f32>,
+    @location(3) uv: vec2<f32>,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) color: vec3<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) light_mag: f32,
 };
 
 
@@ -26,8 +31,8 @@ fn vs_main(
 ) -> VertexOutput {
     var out: VertexOutput;
     out.clip_position = camera.view_projection * vec4<f32>(model.position, 1.0);
-    var light_mag = abs(dot(model.normal, LIGHT_DIRECTION));
-    out.color = FACE_COLOR * light_mag;
+    out.uv = model.uv;
+    out.light_mag = abs(dot(model.normal, LIGHT_DIRECTION));
     return out;
 }
 
@@ -36,5 +41,8 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(in.color.r, in.color.g, in.color.b, 1.0);
+    let texture_color = textureSample(texture_view, texture_sampler, in.uv);
+    let blended_color = mix(FACE_COLOR, texture_color.rgb, 0.35);
+    let lit_color = blended_color * in.light_mag;
+    return vec4<f32>(lit_color, 1.0);
 }
