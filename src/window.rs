@@ -6,10 +6,10 @@ use std::time::Instant;
 use cgmath::{vec2, Vector2};
 use pollster::FutureExt as _;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, KeyEvent, WindowEvent};
+use winit::event::{DeviceEvent, DeviceId, ElementState, KeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::window::{Window, WindowId};
+use winit::window::{Window, WindowId, CursorGrabMode};
 use wgpu::util::DeviceExt;
 use wgpu_text::{glyph_brush::{Section as TextSection, OwnedText, ab_glyph::FontRef, OwnedSection}, BrushBuilder, TextBrush};
 
@@ -335,14 +335,16 @@ impl RenderState<'_> {
 
 pub struct InputState {
     keys: HashSet<KeyCode>,
-    left_mouse: bool,
+    pub mouse_delta: Vector2<f64>,
+    pub cursor_captured: bool,
 }
 
 impl InputState {
     fn new() -> Self {
         Self {
             keys: HashSet::new(),
-            left_mouse: false,
+            mouse_delta: vec2(0.0, 0.0),
+            cursor_captured: false,
         }
     }
 
@@ -356,10 +358,6 @@ impl InputState {
 
     pub fn is_key_pressed(&self, key_code: KeyCode) -> bool {
         self.keys.contains(&key_code)
-    }
-
-    pub fn is_left_mouse_pressed(&self) -> bool {
-        self.left_mouse
     }
 }
 
@@ -410,10 +408,28 @@ impl<'a> App<'a> {
 
         self.game_state.set_window_size(self.get_window_size());
         self.game_state.generate_voxels();
+
+        // Capture cursor on startup
+        self.set_cursor_captured(true);
+    }
+
+    fn set_cursor_captured(&mut self, captured: bool) {
+        let window = &self.render_state().window;
+        if captured {
+            window.set_cursor_visible(false);
+            window.set_cursor_grab(CursorGrabMode::Confined)
+                .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
+                .unwrap();
+        } else {
+            window.set_cursor_visible(true);
+            window.set_cursor_grab(CursorGrabMode::None).unwrap();
+        }
+        self.input_state.cursor_captured = captured;
     }
 
     fn update(&mut self, dt: f64) {
         self.game_state.update(dt, &self.input_state);
+        self.input_state.mouse_delta = vec2(0.0, 0.0);
         let view_projection = self.game_state.camera.build_view_projection_matrix();
         self.render_state_mut().camera_uniform.set_view_projection(view_projection);
         if self.frame_count % 20 == 0 {
@@ -448,6 +464,18 @@ impl ApplicationHandler for App<'_> {
         self.init_render_state(event_loop).block_on();
     }
 
+    fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device_id: DeviceId, event: DeviceEvent) {
+        match event {
+            DeviceEvent::MouseMotion { delta } => {
+                if self.input_state.cursor_captured {
+                    let (dx, dy) = delta;
+                    self.input_state.mouse_delta += vec2(dx, dy);
+                }
+            }
+            _ => (),
+        }
+    }
+
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => self.game_state.exit = true,
@@ -461,10 +489,23 @@ impl ApplicationHandler for App<'_> {
                 ..
             } => {
                 if state == ElementState::Pressed {
+                    if key_code == KeyCode::Escape {
+                        self.set_cursor_captured(false);
+                    }
                     self.input_state.on_key_pressed(key_code);
                     self.game_state.on_key_pressed(key_code);
                 } else if state == ElementState::Released {
                     self.input_state.on_key_released(key_code);
+                }
+            },
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } => {
+                // Re-capture cursor on click
+                if !self.input_state.cursor_captured {
+                    self.set_cursor_captured(true);
                 }
             },
             WindowEvent::RedrawRequested => {

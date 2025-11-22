@@ -254,6 +254,12 @@ impl GameState {
         }
 
         if self.is_camera_first_person {
+            // Mouse control (primary input)
+            const MOUSE_SENSITIVITY: f32 = 0.003;
+            self.first_person_camera_controller.yaw += input_state.mouse_delta.x as f32 * MOUSE_SENSITIVITY;
+            self.first_person_camera_controller.pitch -= input_state.mouse_delta.y as f32 * MOUSE_SENSITIVITY;
+
+            // Arrow keys (alternative control)
             if input_state.is_key_pressed(KeyCode::ArrowUp) {
                 self.first_person_camera_controller.pitch += 0.01;
             }
@@ -266,6 +272,7 @@ impl GameState {
             if input_state.is_key_pressed(KeyCode::ArrowLeft) {
                 self.first_person_camera_controller.yaw -= 0.01;
             }
+
             let player_center_base = self.player.get_center_base_f32();
             let eye_height = Fixed::vector3_to_f32(self.player.body.collision_size).y * 0.9; // Eye level near top of hitbox
             self.camera.position = (player_center_base + vec3(0.0, eye_height, 0.0)) * VOXEL_SIZE.x;
