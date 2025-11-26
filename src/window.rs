@@ -32,14 +32,18 @@ struct RenderState<'a> {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     timestamp_query_state: Option<TimestampQueryState>,
-    render_pipeline: wgpu::RenderPipeline,
+    voxel_render_pipeline: wgpu::RenderPipeline,
+    flower_render_pipeline: wgpu::RenderPipeline,
     depth_texture: DepthTexture,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
     #[allow(unused)]
     voxel_texture: Texture,
-    texture_bind_group: wgpu::BindGroup,
+    voxel_texture_bind_group: wgpu::BindGroup,
+    #[allow(unused)]
+    flower_texture: Texture,
+    flower_texture_bind_group: wgpu::BindGroup,
     #[allow(unused)]
     font: &'a [u8],
     text_brush: TextBrush<FontRef<'a>>,
@@ -139,6 +143,9 @@ impl RenderState<'_> {
         let voxel_texture_bytes = include_bytes!("../textures/noise_128.png");
         let voxel_texture = Texture::from_bytes(&device, &queue, voxel_texture_bytes, "voxel_texture").unwrap();
 
+        let flower_texture_bytes = include_bytes!("../textures/daisies.png");
+        let flower_texture = Texture::from_bytes(&device, &queue, flower_texture_bytes, "flower_texture").unwrap();
+
         let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
@@ -161,7 +168,7 @@ impl RenderState<'_> {
             label: Some("texture_bind_group_layout"),
         });
 
-        let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let voxel_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -173,7 +180,22 @@ impl RenderState<'_> {
                     resource: wgpu::BindingResource::TextureView(&voxel_texture.view),
                 },
             ],
-            label: Some("texture_bind_group"),
+            label: Some("voxel_texture_bind_group"),
+        });
+
+        let flower_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(&flower_texture.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&flower_texture.view),
+                },
+            ],
+            label: Some("flower_texture_bind_group"),
         });
 
         let depth_stencil_state = wgpu::DepthStencilState {
@@ -221,24 +243,25 @@ impl RenderState<'_> {
             None
         };
 
-        let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[&camera_bind_group_layout, &texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+
+        let voxel_shader = device.create_shader_module(wgpu::include_wgsl!("voxel_shader.wgsl"));
+        let voxel_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
+                module: &voxel_shader,
                 entry_point: Some("vs_main"),
                 buffers: &[Vertex::buffer_layout()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
+                module: &voxel_shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
@@ -252,6 +275,45 @@ impl RenderState<'_> {
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: Some(depth_stencil_state.clone()),
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
+        let flower_shader = device.create_shader_module(wgpu::include_wgsl!("flower_shader.wgsl"));
+        let flower_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Flower Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &flower_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[Vertex::buffer_layout()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &flower_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,  // Disable backface culling for crossed quads
                 polygon_mode: wgpu::PolygonMode::Fill,
                 unclipped_depth: false,
                 conservative: false,
@@ -273,13 +335,16 @@ impl RenderState<'_> {
             queue,
             config,
             timestamp_query_state,
-            render_pipeline,
+            voxel_render_pipeline,
+            flower_render_pipeline,
             depth_texture,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
             voxel_texture,
-            texture_bind_group,
+            voxel_texture_bind_group,
+            flower_texture,
+            flower_texture_bind_group,
             font,
             text_brush,
             text_section,
@@ -292,11 +357,18 @@ impl RenderState<'_> {
     }
 
     fn render(&mut self, voxel_vertices: &Vec<Vertex>, flower_vertices: &Vec<Vertex>) -> Result<(), wgpu::SurfaceError> {
-        let vertex_buffer = self.device.create_buffer_init(
+        let voxel_vertex_buffer = self.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
+                label: Some("Voxel Vertex Buffer"),
                 contents: bytemuck::cast_slice(&voxel_vertices),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+        let flower_vertex_buffer = self.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Flower Vertex Buffer"),
+                contents: bytemuck::cast_slice(&flower_vertices),
+                usage: wgpu::BufferUsages::VERTEX,
             });
 
         let output = self.surface.get_current_texture()?;
@@ -335,15 +407,20 @@ impl RenderState<'_> {
                     }
                 }),
             });
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
 
+            // Render voxels
+            render_pass.set_pipeline(&self.voxel_render_pipeline);
+            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.voxel_texture_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, voxel_vertex_buffer.slice(..));
             let n_vertices = voxel_vertices.len() as u32;
             render_pass.draw(0..n_vertices, 0..1);
 
-            self.queue.write_buffer(&vertex_buffer, 0, bytemuck::cast_slice(&flower_vertices));
+            // Render flowers
+            render_pass.set_pipeline(&self.flower_render_pipeline);
+            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.flower_texture_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, flower_vertex_buffer.slice(..));
             let n_vertices = flower_vertices.len() as u32;
             render_pass.draw(0..n_vertices, 0..1);
 

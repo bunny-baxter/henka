@@ -159,20 +159,20 @@ impl Flower {
         let quad1_top1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, QUAD_SIZE, QUAD_SIZE / 2.0));
         let quad1_top2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, QUAD_SIZE, -QUAD_SIZE / 2.0));
         let quad1_normal = calc_normal(quad1_base1_pos, quad1_base2_pos, quad1_top1_pos);
-        let quad1_base1 = Vertex { position: quad1_base1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 0.0], normal: quad1_normal };
-        let quad1_base2 = Vertex { position: quad1_base2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 0.0], normal: quad1_normal };
-        let quad1_top1 = Vertex { position: quad1_top1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 1.0], normal: quad1_normal };
-        let quad1_top2 = Vertex { position: quad1_top2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 1.0], normal: quad1_normal };
+        let quad1_base1 = Vertex { position: quad1_base1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 1.0], normal: quad1_normal };
+        let quad1_base2 = Vertex { position: quad1_base2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 1.0], normal: quad1_normal };
+        let quad1_top1 = Vertex { position: quad1_top1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 0.0], normal: quad1_normal };
+        let quad1_top2 = Vertex { position: quad1_top2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 0.0], normal: quad1_normal };
 
         let quad2_base1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, 0.0, QUAD_SIZE / 2.0));
         let quad2_base2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, 0.0, -QUAD_SIZE / 2.0));
         let quad2_top1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, QUAD_SIZE, QUAD_SIZE / 2.0));
         let quad2_top2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, QUAD_SIZE, -QUAD_SIZE / 2.0));
         let quad2_normal = calc_normal(quad2_base1_pos, quad2_base2_pos, quad2_top1_pos);
-        let quad2_base1 = Vertex { position: quad2_base1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 0.0], normal: quad2_normal };
-        let quad2_base2 = Vertex { position: quad2_base2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 0.0], normal: quad2_normal };
-        let quad2_top1 = Vertex { position: quad2_top1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 1.0], normal: quad2_normal };
-        let quad2_top2 = Vertex { position: quad2_top2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 1.0], normal: quad2_normal };
+        let quad2_base1 = Vertex { position: quad2_base1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 1.0], normal: quad2_normal };
+        let quad2_base2 = Vertex { position: quad2_base2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 1.0], normal: quad2_normal };
+        let quad2_top1 = Vertex { position: quad2_top1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 0.0], normal: quad2_normal };
+        let quad2_top2 = Vertex { position: quad2_top2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 0.0], normal: quad2_normal };
 
         vec![
             quad1_base1, quad1_top1, quad1_top2,
