@@ -70,18 +70,21 @@ impl PlayerActor {
     }
 }
 
+fn point3_to_array(p: Point3<f32>) -> [f32; 3] {
+    [p.x, p.y, p.z]
+}
+
+fn calc_normal(p0: [f32; 3], p1: [f32; 3], p2: [f32; 3]) -> [f32; 3] {
+    let edge1 = vec3(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]);
+    let edge2 = vec3(p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]);
+    let normal = edge1.cross(edge2).normalize();
+    [normal.x, normal.y, normal.z]
+}
+
 // Function written by Claude, cleaned up by me
 fn create_pyramid_mesh(offset: Point3<f32>, base_size: f32, height: f32) -> Vec<Vertex> {
     const YELLOW: [f32; 3] = [1.0, 1.0, 0.0];
     let half_base = base_size / 2.0;
-
-    // Helper function to calculate face normal from three vertices
-    let calc_normal = |p0: [f32; 3], p1: [f32; 3], p2: [f32; 3]| -> [f32; 3] {
-        let edge1 = vec3(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]);
-        let edge2 = vec3(p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]);
-        let normal = edge1.cross(edge2).normalize();
-        [normal.x, normal.y, normal.z]
-    };
 
     // Define the 5 vertex positions
     let apex_pos = [offset.x, offset.y + height, offset.z];
@@ -141,6 +144,45 @@ fn create_pyramid_mesh(offset: Point3<f32>, base_size: f32, height: f32) -> Vec<
     ]
 }
 
+pub struct Flower {
+    position: Point3<Fixed>,
+    sprite_index: (u32, u32),
+}
+
+impl Flower {
+    pub fn get_vertices(&self) -> Vec<Vertex> {
+        const QUAD_SIZE: f32 = 0.5;
+        let pos = Fixed::point3_to_f32(self.position);
+
+        let quad1_base1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, 0.0, QUAD_SIZE / 2.0));
+        let quad1_base2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, 0.0, -QUAD_SIZE / 2.0));
+        let quad1_top1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, QUAD_SIZE, QUAD_SIZE / 2.0));
+        let quad1_top2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, QUAD_SIZE, -QUAD_SIZE / 2.0));
+        let quad1_normal = calc_normal(quad1_base1_pos, quad1_base2_pos, quad1_top1_pos);
+        let quad1_base1 = Vertex { position: quad1_base1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 0.0], normal: quad1_normal };
+        let quad1_base2 = Vertex { position: quad1_base2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 0.0], normal: quad1_normal };
+        let quad1_top1 = Vertex { position: quad1_top1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 1.0], normal: quad1_normal };
+        let quad1_top2 = Vertex { position: quad1_top2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 1.0], normal: quad1_normal };
+
+        let quad2_base1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, 0.0, QUAD_SIZE / 2.0));
+        let quad2_base2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, 0.0, -QUAD_SIZE / 2.0));
+        let quad2_top1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, QUAD_SIZE, QUAD_SIZE / 2.0));
+        let quad2_top2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, QUAD_SIZE, -QUAD_SIZE / 2.0));
+        let quad2_normal = calc_normal(quad2_base1_pos, quad2_base2_pos, quad2_top1_pos);
+        let quad2_base1 = Vertex { position: quad2_base1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 0.0], normal: quad2_normal };
+        let quad2_base2 = Vertex { position: quad2_base2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 0.0], normal: quad2_normal };
+        let quad2_top1 = Vertex { position: quad2_top1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 1.0], normal: quad2_normal };
+        let quad2_top2 = Vertex { position: quad2_top2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 1.0], normal: quad2_normal };
+
+        vec![
+            quad1_base1, quad1_top1, quad1_top2,
+            quad1_top2, quad1_base2, quad1_base1,
+            quad2_base1, quad2_top1, quad2_top2,
+            quad2_top2, quad2_base2, quad2_base1,
+        ]
+    }
+}
+
 pub struct GameState {
     pub exit: bool,
     pub window_size: Vector2<u32>,
@@ -152,6 +194,7 @@ pub struct GameState {
     physics_tick_accumulator: f64,
     physics_config: PhysicsConfig,
     pub player: PlayerActor,
+    pub flowers: Vec<Flower>,
 }
 
 impl GameState {
@@ -177,6 +220,7 @@ impl GameState {
             physics_tick_accumulator: 0.0,
             physics_config: PhysicsConfig { gravity: vec3(Fixed::ZERO, -Fixed::new(0, 3), Fixed::ZERO) },
             player,
+            flowers: vec![],
         }
     }
 
@@ -209,6 +253,11 @@ impl GameState {
         self.chunk.set_voxel(vec3(13, 3, 14), 1);
         self.chunk.set_voxel(vec3(14, 3, 14), 1);
         self.chunk.set_voxel(vec3(13, 4, 13), 1);
+
+        self.flowers.push(Flower {
+            position: point3(Fixed::new(8, 0), Fixed::new(3, 0), Fixed::new(3, 0)),
+            sprite_index: (0, 0),
+        });
     }
 
     pub fn on_key_pressed(&mut self, key_code: KeyCode) {
@@ -305,7 +354,7 @@ impl GameState {
         }
     }
 
-    pub fn get_vertices(&self) -> Vec<Vertex> {
+    pub fn get_voxel_vertices(&self) -> Vec<Vertex> {
         let mut vertices = vec![];
         vertices.append(&mut self.chunk.get_vertices().clone());
         // Center the player model on the hitbox base

@@ -291,12 +291,12 @@ impl RenderState<'_> {
         self.text_brush.queue(&self.device, &self.queue, [&self.text_section]).unwrap();
     }
 
-    fn render(&mut self, vertices: &Vec<Vertex>) -> Result<(), wgpu::SurfaceError> {
+    fn render(&mut self, voxel_vertices: &Vec<Vertex>, flower_vertices: &Vec<Vertex>) -> Result<(), wgpu::SurfaceError> {
         let vertex_buffer = self.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
+                contents: bytemuck::cast_slice(&voxel_vertices),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             });
 
         let output = self.surface.get_current_texture()?;
@@ -340,7 +340,11 @@ impl RenderState<'_> {
             render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
 
-            let n_vertices = vertices.len() as u32;
+            let n_vertices = voxel_vertices.len() as u32;
+            render_pass.draw(0..n_vertices, 0..1);
+
+            self.queue.write_buffer(&vertex_buffer, 0, bytemuck::cast_slice(&flower_vertices));
+            let n_vertices = flower_vertices.len() as u32;
             render_pass.draw(0..n_vertices, 0..1);
 
             self.text_brush.draw(&mut render_pass);
@@ -500,8 +504,12 @@ impl<'a> App<'a> {
     }
 
     fn render(&mut self) {
-        let vertices = self.game_state.get_vertices();
-        self.render_state_mut().render(&vertices).unwrap();
+        let voxel_vertices = self.game_state.get_voxel_vertices();
+        let mut flower_vertices = vec![];
+        for flower in self.game_state.flowers.iter() {
+            flower_vertices.append(&mut flower.get_vertices());
+        }
+        self.render_state_mut().render(&voxel_vertices, &flower_vertices).unwrap();
     }
 }
 
