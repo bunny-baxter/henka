@@ -154,7 +154,7 @@ pub struct Flower {
 }
 
 impl Flower {
-    pub fn get_vertices(&self) -> Vec<Vertex> {
+    pub fn get_vertices(&self, camera_pos: Point3<f32>) -> Vec<Vertex> {
         const QUAD_SIZE: f32 = 0.85;
         let pos = physics_point_to_world(self.position);
 
@@ -163,31 +163,29 @@ impl Flower {
         let uv_offset_x = self.sprite_index.0 as f32 * uv_scale;
         let uv_offset_y = self.sprite_index.1 as f32 * uv_scale;
 
-        let quad1_base1_pos = point3_to_array(pos + vec3(QUAD_SIZE / 2.0, 0.0, QUAD_SIZE / 2.0));
-        let quad1_base2_pos = point3_to_array(pos + vec3(-QUAD_SIZE / 2.0, 0.0, -QUAD_SIZE / 2.0));
-        let quad1_top1_pos = point3_to_array(pos + vec3(QUAD_SIZE / 2.0, QUAD_SIZE, QUAD_SIZE / 2.0));
-        let quad1_top2_pos = point3_to_array(pos + vec3(-QUAD_SIZE / 2.0, QUAD_SIZE, -QUAD_SIZE / 2.0));
-        let quad1_normal = calc_normal(quad1_base1_pos, quad1_base2_pos, quad1_top1_pos);
-        let quad1_base1 = Vertex { position: quad1_base1_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y + uv_scale], normal: quad1_normal };
-        let quad1_base2 = Vertex { position: quad1_base2_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y + uv_scale], normal: quad1_normal };
-        let quad1_top1 = Vertex { position: quad1_top1_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y], normal: quad1_normal };
-        let quad1_top2 = Vertex { position: quad1_top2_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y], normal: quad1_normal };
+        // Billboard: calculate direction from flower to camera (only in XZ plane)
+        let to_camera = camera_pos - pos;
+        let to_camera_xz = vec3(to_camera.x, 0.0, to_camera.z).normalize();
 
-        let quad2_base1_pos = point3_to_array(pos + vec3(-QUAD_SIZE / 2.0, 0.0, QUAD_SIZE / 2.0));
-        let quad2_base2_pos = point3_to_array(pos + vec3(QUAD_SIZE / 2.0, 0.0, -QUAD_SIZE / 2.0));
-        let quad2_top1_pos = point3_to_array(pos + vec3(-QUAD_SIZE / 2.0, QUAD_SIZE, QUAD_SIZE / 2.0));
-        let quad2_top2_pos = point3_to_array(pos + vec3(QUAD_SIZE / 2.0, QUAD_SIZE, -QUAD_SIZE / 2.0));
-        let quad2_normal = calc_normal(quad2_base1_pos, quad2_base2_pos, quad2_top1_pos);
-        let quad2_base1 = Vertex { position: quad2_base1_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y + uv_scale], normal: quad2_normal };
-        let quad2_base2 = Vertex { position: quad2_base2_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y + uv_scale], normal: quad2_normal };
-        let quad2_top1 = Vertex { position: quad2_top1_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y], normal: quad2_normal };
-        let quad2_top2 = Vertex { position: quad2_top2_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y], normal: quad2_normal };
+        // Right vector perpendicular to camera direction
+        let right = vec3(-to_camera_xz.z, 0.0, to_camera_xz.x) * (QUAD_SIZE / 2.0);
+
+        // Create a single quad facing the camera
+        let base_left_pos = point3_to_array(pos - right);
+        let base_right_pos = point3_to_array(pos + right);
+        let top_left_pos = point3_to_array(pos - right + vec3(0.0, QUAD_SIZE, 0.0));
+        let top_right_pos = point3_to_array(pos + right + vec3(0.0, QUAD_SIZE, 0.0));
+
+        let normal = calc_normal(base_left_pos, base_right_pos, top_left_pos);
+
+        let base_left = Vertex { position: base_left_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y + uv_scale], normal };
+        let base_right = Vertex { position: base_right_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y + uv_scale], normal };
+        let top_left = Vertex { position: top_left_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y], normal };
+        let top_right = Vertex { position: top_right_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y], normal };
 
         vec![
-            quad1_base1, quad1_top1, quad1_top2,
-            quad1_top2, quad1_base2, quad1_base1,
-            quad2_base1, quad2_top1, quad2_top2,
-            quad2_top2, quad2_base2, quad2_base1,
+            base_left, top_left, top_right,
+            top_right, base_right, base_left,
         ]
     }
 }
@@ -399,7 +397,7 @@ impl GameState {
             .collect();
         flowers_with_distance.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap()); // Sort descending
         for (flower, _) in flowers_with_distance {
-            result.append(&mut flower.get_vertices());
+            result.append(&mut flower.get_vertices(camera_pos));
         }
         result
     }
