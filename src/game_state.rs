@@ -5,7 +5,7 @@ use crate::camera::Camera;
 use crate::fixed_point::Fixed;
 use crate::render_util::Vertex;
 use crate::physics_world::{PhysicsBody, PhysicsConfig, physics_tick};
-use crate::voxel::{CHUNK_SIZE, VoxelChunk, VOXEL_SIZE};
+use crate::voxel::{CHUNK_SIZE, VoxelChunk, VOXEL_SCALE};
 use crate::window::InputState;
 
 const PHYSICS_SECONDS_PER_TICK: f64 = 1.0 / 60.0;
@@ -46,6 +46,10 @@ impl OrbitCameraController {
     }
 }
 
+fn physics_point_to_world(physics_point: Point3<Fixed>) -> Point3<f32> {
+    Fixed::point3_to_f32(physics_point) * VOXEL_SCALE
+}
+
 pub struct PlayerActor {
     pub body: PhysicsBody,
 }
@@ -60,13 +64,13 @@ impl PlayerActor {
     fn get_center_f32(&self) -> Point3<f32> {
         let pos = Fixed::point3_to_f32(self.body.position);
         let half_size = Fixed::vector3_to_f32(self.body.collision_size) * 0.5;
-        point3(pos.x + half_size.x, pos.y + half_size.y, pos.z + half_size.z)
+        point3(pos.x + half_size.x, pos.y + half_size.y, pos.z + half_size.z) * VOXEL_SCALE
     }
 
     fn get_center_base_f32(&self) -> Point3<f32> {
         let pos = Fixed::point3_to_f32(self.body.position);
         let half_size = Fixed::vector3_to_f32(self.body.collision_size) * 0.5;
-        point3(pos.x + half_size.x, pos.y, pos.z + half_size.z)
+        point3(pos.x + half_size.x, pos.y, pos.z + half_size.z) * VOXEL_SCALE
     }
 }
 
@@ -145,34 +149,34 @@ fn create_pyramid_mesh(offset: Point3<f32>, base_size: f32, height: f32) -> Vec<
 }
 
 pub struct Flower {
-    position: Point3<Fixed>,
+    pub position: Point3<Fixed>,
     sprite_index: (u32, u32),
 }
 
 impl Flower {
     pub fn get_vertices(&self) -> Vec<Vertex> {
-        const QUAD_SIZE: f32 = 0.5;
-        let pos = Fixed::point3_to_f32(self.position);
+        const QUAD_SIZE: f32 = 0.85;
+        let pos = physics_point_to_world(self.position);
 
         // Calculate UV offsets for sprite atlas (2x2 grid)
         let uv_scale = 0.5; // Each subimage is half the texture size
         let uv_offset_x = self.sprite_index.0 as f32 * uv_scale;
         let uv_offset_y = self.sprite_index.1 as f32 * uv_scale;
 
-        let quad1_base1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, 0.0, QUAD_SIZE / 2.0));
-        let quad1_base2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, 0.0, -QUAD_SIZE / 2.0));
-        let quad1_top1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, QUAD_SIZE, QUAD_SIZE / 2.0));
-        let quad1_top2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, QUAD_SIZE, -QUAD_SIZE / 2.0));
+        let quad1_base1_pos = point3_to_array(pos + vec3(QUAD_SIZE / 2.0, 0.0, QUAD_SIZE / 2.0));
+        let quad1_base2_pos = point3_to_array(pos + vec3(-QUAD_SIZE / 2.0, 0.0, -QUAD_SIZE / 2.0));
+        let quad1_top1_pos = point3_to_array(pos + vec3(QUAD_SIZE / 2.0, QUAD_SIZE, QUAD_SIZE / 2.0));
+        let quad1_top2_pos = point3_to_array(pos + vec3(-QUAD_SIZE / 2.0, QUAD_SIZE, -QUAD_SIZE / 2.0));
         let quad1_normal = calc_normal(quad1_base1_pos, quad1_base2_pos, quad1_top1_pos);
         let quad1_base1 = Vertex { position: quad1_base1_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y + uv_scale], normal: quad1_normal };
         let quad1_base2 = Vertex { position: quad1_base2_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y + uv_scale], normal: quad1_normal };
         let quad1_top1 = Vertex { position: quad1_top1_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y], normal: quad1_normal };
         let quad1_top2 = Vertex { position: quad1_top2_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y], normal: quad1_normal };
 
-        let quad2_base1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, 0.0, QUAD_SIZE / 2.0));
-        let quad2_base2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, 0.0, -QUAD_SIZE / 2.0));
-        let quad2_top1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, QUAD_SIZE, QUAD_SIZE / 2.0));
-        let quad2_top2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, QUAD_SIZE, -QUAD_SIZE / 2.0));
+        let quad2_base1_pos = point3_to_array(pos + vec3(-QUAD_SIZE / 2.0, 0.0, QUAD_SIZE / 2.0));
+        let quad2_base2_pos = point3_to_array(pos + vec3(QUAD_SIZE / 2.0, 0.0, -QUAD_SIZE / 2.0));
+        let quad2_top1_pos = point3_to_array(pos + vec3(-QUAD_SIZE / 2.0, QUAD_SIZE, QUAD_SIZE / 2.0));
+        let quad2_top2_pos = point3_to_array(pos + vec3(QUAD_SIZE / 2.0, QUAD_SIZE, -QUAD_SIZE / 2.0));
         let quad2_normal = calc_normal(quad2_base1_pos, quad2_base2_pos, quad2_top1_pos);
         let quad2_base1 = Vertex { position: quad2_base1_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y + uv_scale], normal: quad2_normal };
         let quad2_base2 = Vertex { position: quad2_base2_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y + uv_scale], normal: quad2_normal };
@@ -263,6 +267,18 @@ impl GameState {
             position: point3(Fixed::new(8, 0), Fixed::new(3, 0), Fixed::new(3, 0)),
             sprite_index: (0, 0),
         });
+        self.flowers.push(Flower {
+            position: point3(Fixed::new(9, 0), Fixed::new(3, 0), Fixed::new(4, 0)),
+            sprite_index: (1, 0),
+        });
+        self.flowers.push(Flower {
+            position: point3(Fixed::new(10, 0), Fixed::new(3, 0), Fixed::new(4, 0)),
+            sprite_index: (1, 0),
+        });
+        self.flowers.push(Flower {
+            position: point3(Fixed::new(12, 0), Fixed::new(3, 0), Fixed::new(8, 0)),
+            sprite_index: (1, 1),
+        });
     }
 
     pub fn on_key_pressed(&mut self, key_code: KeyCode) {
@@ -328,8 +344,8 @@ impl GameState {
             }
 
             let player_center_base = self.player.get_center_base_f32();
-            let eye_height = Fixed::vector3_to_f32(self.player.body.collision_size).y * 0.9; // Eye level near top of hitbox
-            self.camera.position = (player_center_base + vec3(0.0, eye_height, 0.0)) * VOXEL_SIZE.x;
+            let eye_height = self.player.body.collision_size.y.to_f32() * VOXEL_SCALE * 0.95;
+            self.camera.position = player_center_base + vec3(0.0, eye_height, 0.0);
             self.camera.target = self.first_person_camera_controller.get_camera_target(&self.camera.position);
         } else {
             if input_state.is_key_pressed(KeyCode::ArrowUp) {
@@ -354,7 +370,7 @@ impl GameState {
                 self.orbit_camera_controller.height += 0.05;
             }
             // Center the camera target on the player's hitbox
-            self.camera.target = self.player.get_center_f32() * VOXEL_SIZE.x;
+            self.camera.target = self.player.get_center_f32();
             self.camera.position = self.orbit_camera_controller.get_camera_position(&self.camera.target);
         }
     }
@@ -363,7 +379,28 @@ impl GameState {
         let mut vertices = vec![];
         vertices.append(&mut self.chunk.get_vertices().clone());
         // Center the player model on the hitbox base
-        vertices.append(&mut create_pyramid_mesh(self.player.get_center_base_f32() * VOXEL_SIZE.x, 0.25, 0.5));
+        vertices.append(&mut create_pyramid_mesh(
+                self.player.get_center_base_f32(),
+                self.player.body.collision_size.x.to_f32() * VOXEL_SCALE,
+                self.player.body.collision_size.y.to_f32() * VOXEL_SCALE));
         vertices
+    }
+
+    pub fn get_flower_vertices(&self) -> Vec<Vertex> {
+        let mut result = vec![];
+        // Sort flowers by distance to camera because depth buffer writing is disabled
+        let camera_pos = self.camera.position;
+        let mut flowers_with_distance: Vec<(&Flower, f32)> = self.flowers.iter()
+            .map(|f| {
+                let flower_pos = physics_point_to_world(f.position);
+                let distance = (camera_pos - flower_pos).magnitude();
+                (f, distance)
+            })
+            .collect();
+        flowers_with_distance.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap()); // Sort descending
+        for (flower, _) in flowers_with_distance {
+            result.append(&mut flower.get_vertices());
+        }
+        result
     }
 }

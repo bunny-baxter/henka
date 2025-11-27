@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
-use cgmath::{vec2, Vector2};
+use cgmath::{InnerSpace, vec2, Vector2};
 use pollster::FutureExt as _;
 use winit::application::ApplicationHandler;
 use winit::event::{DeviceEvent, DeviceId, ElementState, KeyEvent, MouseButton, WindowEvent};
@@ -206,6 +206,15 @@ impl RenderState<'_> {
             bias: wgpu::DepthBiasState::default(),
         };
 
+        // Depth state for transparent objects: test but don't write
+        let transparent_depth_stencil_state = wgpu::DepthStencilState {
+            format: DepthTexture::DEPTH_FORMAT,
+            depth_write_enabled: false,
+            depth_compare: wgpu::CompareFunction::Less,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        };
+
         let font = include_bytes!("Rubik-Regular.ttf");
         let text_brush = BrushBuilder::using_font_bytes(font).unwrap()
             .with_depth_stencil(Some(depth_stencil_state.clone()))
@@ -318,7 +327,7 @@ impl RenderState<'_> {
                 unclipped_depth: false,
                 conservative: false,
             },
-            depth_stencil: Some(depth_stencil_state),
+            depth_stencil: Some(transparent_depth_stencil_state),
             multisample: wgpu::MultisampleState {
                 count: 1,
                 mask: !0,
@@ -582,10 +591,7 @@ impl<'a> App<'a> {
 
     fn render(&mut self) {
         let voxel_vertices = self.game_state.get_voxel_vertices();
-        let mut flower_vertices = vec![];
-        for flower in self.game_state.flowers.iter() {
-            flower_vertices.append(&mut flower.get_vertices());
-        }
+        let flower_vertices = self.game_state.get_flower_vertices();
         self.render_state_mut().render(&voxel_vertices, &flower_vertices).unwrap();
     }
 }
