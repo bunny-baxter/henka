@@ -154,25 +154,30 @@ impl Flower {
         const QUAD_SIZE: f32 = 0.5;
         let pos = Fixed::point3_to_f32(self.position);
 
+        // Calculate UV offsets for sprite atlas (2x2 grid)
+        let uv_scale = 0.5; // Each subimage is half the texture size
+        let uv_offset_x = self.sprite_index.0 as f32 * uv_scale;
+        let uv_offset_y = self.sprite_index.1 as f32 * uv_scale;
+
         let quad1_base1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, 0.0, QUAD_SIZE / 2.0));
         let quad1_base2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, 0.0, -QUAD_SIZE / 2.0));
         let quad1_top1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, QUAD_SIZE, QUAD_SIZE / 2.0));
         let quad1_top2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, QUAD_SIZE, -QUAD_SIZE / 2.0));
         let quad1_normal = calc_normal(quad1_base1_pos, quad1_base2_pos, quad1_top1_pos);
-        let quad1_base1 = Vertex { position: quad1_base1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 1.0], normal: quad1_normal };
-        let quad1_base2 = Vertex { position: quad1_base2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 1.0], normal: quad1_normal };
-        let quad1_top1 = Vertex { position: quad1_top1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 0.0], normal: quad1_normal };
-        let quad1_top2 = Vertex { position: quad1_top2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 0.0], normal: quad1_normal };
+        let quad1_base1 = Vertex { position: quad1_base1_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y + uv_scale], normal: quad1_normal };
+        let quad1_base2 = Vertex { position: quad1_base2_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y + uv_scale], normal: quad1_normal };
+        let quad1_top1 = Vertex { position: quad1_top1_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y], normal: quad1_normal };
+        let quad1_top2 = Vertex { position: quad1_top2_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y], normal: quad1_normal };
 
         let quad2_base1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, 0.0, QUAD_SIZE / 2.0));
         let quad2_base2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, 0.0, -QUAD_SIZE / 2.0));
         let quad2_top1_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(-QUAD_SIZE / 2.0, QUAD_SIZE, QUAD_SIZE / 2.0));
         let quad2_top2_pos = point3_to_array(pos * VOXEL_SIZE.x + vec3(QUAD_SIZE / 2.0, QUAD_SIZE, -QUAD_SIZE / 2.0));
         let quad2_normal = calc_normal(quad2_base1_pos, quad2_base2_pos, quad2_top1_pos);
-        let quad2_base1 = Vertex { position: quad2_base1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 1.0], normal: quad2_normal };
-        let quad2_base2 = Vertex { position: quad2_base2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 1.0], normal: quad2_normal };
-        let quad2_top1 = Vertex { position: quad2_top1_pos, color: [1.0, 1.0, 1.0], uv: [0.0, 0.0], normal: quad2_normal };
-        let quad2_top2 = Vertex { position: quad2_top2_pos, color: [1.0, 1.0, 1.0], uv: [1.0, 0.0], normal: quad2_normal };
+        let quad2_base1 = Vertex { position: quad2_base1_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y + uv_scale], normal: quad2_normal };
+        let quad2_base2 = Vertex { position: quad2_base2_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y + uv_scale], normal: quad2_normal };
+        let quad2_top1 = Vertex { position: quad2_top1_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y], normal: quad2_normal };
+        let quad2_top2 = Vertex { position: quad2_top2_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y], normal: quad2_normal };
 
         vec![
             quad1_base1, quad1_top1, quad1_top2,
