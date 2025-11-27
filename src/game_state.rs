@@ -155,7 +155,7 @@ pub struct Flower {
 
 impl Flower {
     pub fn get_vertices(&self, camera_pos: Point3<f32>) -> Vec<Vertex> {
-        const QUAD_SIZE: f32 = 0.85;
+        const QUAD_SIZE: f32 = 0.65;
         let pos = physics_point_to_world(self.position);
 
         // Calculate UV offsets for sprite atlas (2x2 grid)
