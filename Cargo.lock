@@ -988,6 +988,7 @@ dependencies = [
  "env_logger",
  "image",
  "pollster",
+ "rand",
  "wgpu",
  "wgpu_text",
  "winit",

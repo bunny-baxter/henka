@@ -1,5 +1,6 @@
 mod array_3d;
 mod camera;
+mod ecosim;
 mod fixed_point;
 mod game_state;
 mod physics_world;

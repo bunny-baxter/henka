@@ -119,8 +119,20 @@ impl VoxelChunk {
         *self.cached_vertices.borrow_mut() = None;
     }
 
+    pub fn is_out_of_bounds(&self, coord: Vector3<usize>) -> bool {
+        self.voxels.is_out_of_bounds(coord)
+    }
+
+    pub fn is_i32_out_of_bounds(&self, coord: Vector3<i32>) -> bool {
+        self.voxels.is_i32_out_of_bounds(coord)
+    }
+
     pub fn get_voxel(&self, coord: Vector3<usize>) -> i32 {
         self.voxels.get(coord)
+    }
+
+    pub fn get_voxel_i32(&self, coord: Vector3<i32>) -> i32 {
+        self.voxels.get_i32(coord)
     }
 
     pub fn set_voxel(&mut self, coord: Vector3<usize>, value: i32) {

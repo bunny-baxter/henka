@@ -2,6 +2,7 @@ use cgmath::{InnerSpace, Point3, point3, Vector2, vec2, Vector3, vec3};
 use winit::keyboard::KeyCode;
 
 use crate::camera::Camera;
+use crate::ecosim::{EcosimEntity, ecosim_tick, flower_get_sprite_index};
 use crate::fixed_point::Fixed;
 use crate::render_util::Vertex;
 use crate::physics_world::{PhysicsBody, PhysicsConfig, physics_tick};
@@ -9,6 +10,8 @@ use crate::voxel::{CHUNK_SIZE, VoxelChunk, VOXEL_SCALE};
 use crate::window::InputState;
 
 const PHYSICS_SECONDS_PER_TICK: f64 = 1.0 / 60.0;
+
+const ECOSIM_SECONDS_PER_TICK: f64 = 1.0 / 4.0;
 
 struct FirstPersonCameraController {
     pitch: f32,
@@ -154,6 +157,13 @@ pub struct Flower {
 }
 
 impl Flower {
+    fn new(entity: &EcosimEntity) -> Self {
+        Flower {
+            position: point3(Fixed::new(entity.voxel_coord.x as i32, 128), Fixed::new(entity.voxel_coord.y as i32, 0), Fixed::new(entity.voxel_coord.z as i32, 128)),
+            sprite_index: flower_get_sprite_index(entity.genome),
+        }
+    }
+
     pub fn get_vertices(&self, camera_pos: Point3<f32>) -> Vec<Vertex> {
         const QUAD_SIZE: f32 = 0.65;
         let pos = physics_point_to_world(self.position);
@@ -201,7 +211,9 @@ pub struct GameState {
     physics_tick_accumulator: f64,
     physics_config: PhysicsConfig,
     pub player: PlayerActor,
+    ecosim_tick_accumulator: f64,
     pub flowers: Vec<Flower>,
+    pub ecosim_entities: Vec<EcosimEntity>,
 }
 
 impl GameState {
@@ -227,7 +239,9 @@ impl GameState {
             physics_tick_accumulator: 0.0,
             physics_config: PhysicsConfig { gravity: vec3(Fixed::ZERO, -Fixed::new(0, 3), Fixed::ZERO) },
             player,
+            ecosim_tick_accumulator: 0.0,
             flowers: vec![],
+            ecosim_entities: vec![],
         }
     }
 
@@ -261,22 +275,12 @@ impl GameState {
         self.chunk.set_voxel(vec3(14, 3, 14), 1);
         self.chunk.set_voxel(vec3(13, 4, 13), 1);
 
-        self.flowers.push(Flower {
-            position: point3(Fixed::new(8, 0), Fixed::new(3, 0), Fixed::new(3, 0)),
-            sprite_index: (0, 0),
-        });
-        self.flowers.push(Flower {
-            position: point3(Fixed::new(9, 0), Fixed::new(3, 0), Fixed::new(4, 0)),
-            sprite_index: (1, 0),
-        });
-        self.flowers.push(Flower {
-            position: point3(Fixed::new(10, 0), Fixed::new(3, 0), Fixed::new(4, 0)),
-            sprite_index: (1, 0),
-        });
-        self.flowers.push(Flower {
-            position: point3(Fixed::new(12, 0), Fixed::new(3, 0), Fixed::new(8, 0)),
-            sprite_index: (1, 1),
-        });
+        self.ecosim_entities.push(EcosimEntity::new(vec3(8, 3, 3)));
+        self.ecosim_entities.push(EcosimEntity::new(vec3(9, 3, 4)));
+        self.ecosim_entities.push(EcosimEntity::new(vec3(12, 3, 8)));
+        for e in self.ecosim_entities.iter_mut() {
+            e.randomize_genome();
+        }
     }
 
     pub fn on_key_pressed(&mut self, key_code: KeyCode) {
@@ -319,6 +323,15 @@ impl GameState {
             }
             physics_tick(&self.physics_config, std::slice::from_mut(&mut self.player.body), &self.chunk);
             self.physics_tick_accumulator -= PHYSICS_SECONDS_PER_TICK;
+        }
+
+        self.ecosim_tick_accumulator += dt;
+        while self.ecosim_tick_accumulator > ECOSIM_SECONDS_PER_TICK {
+            let mut new_entities = ecosim_tick(&mut self.ecosim_entities, &self.chunk);
+            self.ecosim_entities.append(&mut new_entities);
+            // Regenerate flowers
+            self.flowers = self.ecosim_entities.iter().map(|e| Flower::new(e)).collect();
+            self.ecosim_tick_accumulator -= ECOSIM_SECONDS_PER_TICK;
         }
 
         if self.is_camera_first_person {

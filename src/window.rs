@@ -426,12 +426,14 @@ impl RenderState<'_> {
             render_pass.draw(0..n_vertices, 0..1);
 
             // Render flowers
-            render_pass.set_pipeline(&self.flower_render_pipeline);
-            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.flower_texture_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, flower_vertex_buffer.slice(..));
-            let n_vertices = flower_vertices.len() as u32;
-            render_pass.draw(0..n_vertices, 0..1);
+            if flower_vertices.len() > 0 {
+                render_pass.set_pipeline(&self.flower_render_pipeline);
+                render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+                render_pass.set_bind_group(1, &self.flower_texture_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, flower_vertex_buffer.slice(..));
+                let n_vertices = flower_vertices.len() as u32;
+                render_pass.draw(0..n_vertices, 0..1);
+            }
 
             self.text_brush.draw(&mut render_pass);
         }
