@@ -151,53 +151,40 @@ fn create_pyramid_mesh(offset: Point3<f32>, base_size: f32, height: f32) -> Vec<
     ]
 }
 
-pub struct Flower {
-    pub position: Point3<Fixed>,
-    sprite_index: (u32, u32),
-}
+fn get_entity_vertices(entity: &EcosimEntity, camera_pos: Point3<f32>) -> Vec<Vertex> {
+    const QUAD_SIZE: f32 = 0.65;
+    let pos = physics_point_to_world(entity.position);
 
-impl Flower {
-    fn new(entity: &EcosimEntity) -> Self {
-        Flower {
-            position: point3(entity.position.x, entity.position.y, entity.position.z),
-            sprite_index: flower_get_sprite_index(entity.genome),
-        }
-    }
+    // Calculate UV offsets for sprite atlas (2x2 grid)
+    let sprite_index = flower_get_sprite_index(entity.genome);
+    let uv_scale = 0.5; // Each subimage is half the texture size
+    let uv_offset_x = sprite_index.0 as f32 * uv_scale;
+    let uv_offset_y = sprite_index.1 as f32 * uv_scale;
 
-    pub fn get_vertices(&self, camera_pos: Point3<f32>) -> Vec<Vertex> {
-        const QUAD_SIZE: f32 = 0.65;
-        let pos = physics_point_to_world(self.position);
+    // Billboard: calculate direction from flower to camera (only in XZ plane)
+    let to_camera = camera_pos - pos;
+    let to_camera_xz = vec3(to_camera.x, 0.0, to_camera.z).normalize();
 
-        // Calculate UV offsets for sprite atlas (2x2 grid)
-        let uv_scale = 0.5; // Each subimage is half the texture size
-        let uv_offset_x = self.sprite_index.0 as f32 * uv_scale;
-        let uv_offset_y = self.sprite_index.1 as f32 * uv_scale;
+    // Right vector perpendicular to camera direction
+    let right = vec3(-to_camera_xz.z, 0.0, to_camera_xz.x) * (QUAD_SIZE / 2.0);
 
-        // Billboard: calculate direction from flower to camera (only in XZ plane)
-        let to_camera = camera_pos - pos;
-        let to_camera_xz = vec3(to_camera.x, 0.0, to_camera.z).normalize();
+    // Create a single quad facing the camera
+    let base_left_pos = point3_to_array(pos - right);
+    let base_right_pos = point3_to_array(pos + right);
+    let top_left_pos = point3_to_array(pos - right + vec3(0.0, QUAD_SIZE, 0.0));
+    let top_right_pos = point3_to_array(pos + right + vec3(0.0, QUAD_SIZE, 0.0));
 
-        // Right vector perpendicular to camera direction
-        let right = vec3(-to_camera_xz.z, 0.0, to_camera_xz.x) * (QUAD_SIZE / 2.0);
+    let normal = calc_normal(base_left_pos, base_right_pos, top_left_pos);
 
-        // Create a single quad facing the camera
-        let base_left_pos = point3_to_array(pos - right);
-        let base_right_pos = point3_to_array(pos + right);
-        let top_left_pos = point3_to_array(pos - right + vec3(0.0, QUAD_SIZE, 0.0));
-        let top_right_pos = point3_to_array(pos + right + vec3(0.0, QUAD_SIZE, 0.0));
+    let base_left = Vertex { position: base_left_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y + uv_scale], normal };
+    let base_right = Vertex { position: base_right_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y + uv_scale], normal };
+    let top_left = Vertex { position: top_left_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y], normal };
+    let top_right = Vertex { position: top_right_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y], normal };
 
-        let normal = calc_normal(base_left_pos, base_right_pos, top_left_pos);
-
-        let base_left = Vertex { position: base_left_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y + uv_scale], normal };
-        let base_right = Vertex { position: base_right_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y + uv_scale], normal };
-        let top_left = Vertex { position: top_left_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y], normal };
-        let top_right = Vertex { position: top_right_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y], normal };
-
-        vec![
-            base_left, top_left, top_right,
-            top_right, base_right, base_left,
-        ]
-    }
+    vec![
+        base_left, top_left, top_right,
+        top_right, base_right, base_left,
+    ]
 }
 
 pub struct GameState {
@@ -212,7 +199,6 @@ pub struct GameState {
     physics_config: PhysicsConfig,
     pub player: PlayerActor,
     ecosim_tick_accumulator: f64,
-    pub flowers: Vec<Flower>,
     pub ecosim_entities: Vec<EcosimEntity>,
 }
 
@@ -240,7 +226,6 @@ impl GameState {
             physics_config: PhysicsConfig { gravity: vec3(Fixed::ZERO, -Fixed::new(0, 3), Fixed::ZERO) },
             player,
             ecosim_tick_accumulator: 0.0,
-            flowers: vec![],
             ecosim_entities: vec![],
         }
     }
@@ -329,8 +314,6 @@ impl GameState {
         while self.ecosim_tick_accumulator > ECOSIM_SECONDS_PER_TICK {
             let mut new_entities = ecosim_tick(&mut self.ecosim_entities, &self.chunk);
             self.ecosim_entities.append(&mut new_entities);
-            // Regenerate flowers
-            self.flowers = self.ecosim_entities.iter().map(|e| Flower::new(e)).collect();
             self.ecosim_tick_accumulator -= ECOSIM_SECONDS_PER_TICK;
         }
 
@@ -399,18 +382,18 @@ impl GameState {
 
     pub fn get_flower_vertices(&self) -> Vec<Vertex> {
         let mut result = vec![];
-        // Sort flowers by distance to camera because depth buffer writing is disabled
+        // Sort entities by distance to camera because depth buffer writing is disabled
         let camera_pos = self.camera.position;
-        let mut flowers_with_distance: Vec<(&Flower, f32)> = self.flowers.iter()
-            .map(|f| {
-                let flower_pos = physics_point_to_world(f.position);
-                let distance = (camera_pos - flower_pos).magnitude();
-                (f, distance)
+        let mut entities_with_distance: Vec<(&EcosimEntity, f32)> = self.ecosim_entities.iter()
+            .map(|e| {
+                let entity_pos = physics_point_to_world(e.position);
+                let distance = (camera_pos - entity_pos).magnitude();
+                (e, distance)
             })
             .collect();
-        flowers_with_distance.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap()); // Sort descending
-        for (flower, _) in flowers_with_distance {
-            result.append(&mut flower.get_vertices(camera_pos));
+        entities_with_distance.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap()); // Sort descending
+        for (entity, _) in entities_with_distance {
+            result.append(&mut get_entity_vertices(entity, camera_pos));
         }
         result
     }
