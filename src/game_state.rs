@@ -159,7 +159,7 @@ pub struct Flower {
 impl Flower {
     fn new(entity: &EcosimEntity) -> Self {
         Flower {
-            position: point3(Fixed::new(entity.voxel_coord.x as i32, 128), Fixed::new(entity.voxel_coord.y as i32, 0), Fixed::new(entity.voxel_coord.z as i32, 128)),
+            position: point3(entity.position.x, entity.position.y, entity.position.z),
             sprite_index: flower_get_sprite_index(entity.genome),
         }
     }

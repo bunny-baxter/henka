@@ -3,19 +3,33 @@ use std::collections::HashSet;
 use cgmath::{Point3, point3, Vector3, vec3};
 use rand::Rng;
 
+use crate::fixed_point::Fixed;
 use crate::voxel::VoxelChunk;
 
 pub struct EcosimEntity {
-    pub voxel_coord: Vector3<usize>,
+    pub position: Point3<Fixed>,
     pub genome: u32,
 }
 
 impl EcosimEntity {
     pub fn new(voxel_coord: Vector3<usize>) -> Self {
+        let mut rng = rand::rng();
         EcosimEntity {
-            voxel_coord,
+            position: point3(
+                Fixed::new(voxel_coord.x as i32, rng.random_range(16..=240)),
+                Fixed::new(voxel_coord.y as i32, 0),
+                Fixed::new(voxel_coord.z as i32, rng.random_range(16..=240)),
+            ),
             genome: 0,
         }
+    }
+
+    pub fn voxel_coord(&self) -> Vector3<i32> {
+        vec3(
+            self.position.x.to_f32().floor() as i32,
+            self.position.y.to_f32().floor() as i32,
+            self.position.z.to_f32().floor() as i32,
+        )
     }
 
     pub fn randomize_genome(&mut self) {
@@ -68,18 +82,16 @@ pub fn ecosim_tick(entities: &mut [EcosimEntity], voxels: &VoxelChunk) -> Vec<Ec
     let mut new_entities = vec![];
     let mut occupied_coords: HashSet<Vector3<i32>> = HashSet::new();
     for entity in entities.iter() {
-        let coord_i32 = vec3(entity.voxel_coord.x as i32, entity.voxel_coord.y as i32, entity.voxel_coord.z as i32);
-        occupied_coords.insert(coord_i32);
+        occupied_coords.insert(entity.voxel_coord());
     }
     for entity in entities.iter() {
-        let coord_i32 = vec3(entity.voxel_coord.x as i32, entity.voxel_coord.y as i32, entity.voxel_coord.z as i32);
+        let coord_i32 = entity.voxel_coord();
         for &(dx, dy, dz) in ADJACENCIES.iter() {
             let adj = coord_i32 + vec3(dx, dy, dz);
             if can_entity_grow_into_coord(adj, voxels) && rng.random::<f32>() < 0.02 && !occupied_coords.contains(&adj) {
-                new_entities.push(EcosimEntity {
-                    voxel_coord: adj.map(|i| i as usize),
-                    genome: entity.genome,
-                });
+                let mut new_entity = EcosimEntity::new(adj.map(|i| i as usize));
+                new_entity.genome = entity.genome;
+                new_entities.push(new_entity);
                 occupied_coords.insert(adj);
             }
         }
