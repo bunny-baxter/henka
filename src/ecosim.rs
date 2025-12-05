@@ -6,9 +6,14 @@ use rand::Rng;
 use crate::fixed_point::Fixed;
 use crate::voxel::VoxelChunk;
 
+const FLOWER_MATURITY_AGE: u32 = 20;
+const FLOWER_LIFESPAN: u32 = 45;
+
 pub struct EcosimEntity {
     pub position: Point3<Fixed>,
     pub genome: u32,
+    pub age_ticks: u32,
+    pub dead: bool,
 }
 
 impl EcosimEntity {
@@ -21,6 +26,8 @@ impl EcosimEntity {
                 Fixed::new(voxel_coord.z as i32, rng.random_range(16..=240)),
             ),
             genome: 0,
+            age_ticks: 0,
+            dead: false,
         }
     }
 
@@ -35,6 +42,24 @@ impl EcosimEntity {
     pub fn randomize_genome(&mut self) {
         let mut rng = rand::rng();
         self.genome = rng.random();
+    }
+
+    pub fn flower_get_sprite_index(&self) -> (u32, u32) {
+        let x = if self.age_ticks < FLOWER_MATURITY_AGE / 2 {
+            0
+        } else if self.age_ticks < FLOWER_MATURITY_AGE {
+            1
+        } else {
+            2
+        };
+        let y = if self.dead {
+            4
+        } else {
+            let light = self.genome & 0b1 > 0;
+            let color = self.genome & 0b10 > 0;
+            if light { if color { 2 } else { 0 } } else { if color { 3 } else { 0 } }
+        };
+        (x, y)
     }
 }
 
@@ -77,18 +102,22 @@ fn can_entity_grow_into_coord(coord: Vector3<i32>, voxels: &VoxelChunk) -> bool 
     voxels.get_voxel_i32(coord) == 0 && voxels.get_voxel_i32(below_coord) == 1
 }
 
-pub fn ecosim_tick(entities: &mut [EcosimEntity], voxels: &VoxelChunk) -> Vec<EcosimEntity> {
+pub fn ecosim_tick(entities: &mut Vec<EcosimEntity>, voxels: &VoxelChunk) {
     let mut rng = rand::rng();
     let mut new_entities = vec![];
     let mut occupied_coords: HashSet<Vector3<i32>> = HashSet::new();
-    for entity in entities.iter() {
+    for entity in entities.iter_mut() {
+        entity.age_ticks += 1;
+        if entity.age_ticks >= FLOWER_LIFESPAN {
+            entity.dead = true;
+        }
         occupied_coords.insert(entity.voxel_coord());
     }
     for entity in entities.iter() {
         let coord_i32 = entity.voxel_coord();
         for &(dx, dy, dz) in ADJACENCIES.iter() {
             let adj = coord_i32 + vec3(dx, dy, dz);
-            if can_entity_grow_into_coord(adj, voxels) && rng.random::<f32>() < 0.02 && !occupied_coords.contains(&adj) {
+            if !entity.dead && entity.age_ticks >= FLOWER_MATURITY_AGE && can_entity_grow_into_coord(adj, voxels) && rng.random::<f32>() < 0.02 && !occupied_coords.contains(&adj) {
                 let mut new_entity = EcosimEntity::new(adj.map(|i| i as usize));
                 new_entity.genome = entity.genome;
                 new_entities.push(new_entity);
@@ -96,5 +125,6 @@ pub fn ecosim_tick(entities: &mut [EcosimEntity], voxels: &VoxelChunk) -> Vec<Ec
             }
         }
     }
-    new_entities
+    entities.retain(|entity| entity.age_ticks < FLOWER_LIFESPAN * 2);
+    entities.append(&mut new_entities);
 }

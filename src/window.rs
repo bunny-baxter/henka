@@ -143,7 +143,7 @@ impl RenderState<'_> {
         let voxel_texture_bytes = include_bytes!("../textures/noise_128.png");
         let voxel_texture = Texture::from_bytes(&device, &queue, voxel_texture_bytes, "voxel_texture").unwrap();
 
-        let flower_texture_bytes = include_bytes!("../textures/daisies.png");
+        let flower_texture_bytes = include_bytes!("../textures/daisies2.png");
         let flower_texture = Texture::from_bytes(&device, &queue, flower_texture_bytes, "flower_texture").unwrap();
 
         let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

@@ -2,7 +2,7 @@ use cgmath::{InnerSpace, Point3, point3, Vector2, vec2, Vector3, vec3};
 use winit::keyboard::KeyCode;
 
 use crate::camera::Camera;
-use crate::ecosim::{EcosimEntity, ecosim_tick, flower_get_sprite_index};
+use crate::ecosim::{EcosimEntity, ecosim_tick};
 use crate::fixed_point::Fixed;
 use crate::render_util::Vertex;
 use crate::physics_world::{PhysicsBody, PhysicsConfig, physics_tick};
@@ -156,8 +156,9 @@ fn get_entity_vertices(entity: &EcosimEntity, camera_pos: Point3<f32>) -> Vec<Ve
     let pos = physics_point_to_world(entity.position);
 
     // Calculate UV offsets for sprite atlas (2x2 grid)
-    let sprite_index = flower_get_sprite_index(entity.genome);
-    let uv_scale = 0.5; // Each subimage is half the texture size
+    let sprite_index = entity.flower_get_sprite_index();
+    const FLOWER_UV_SCALE: f32 = 1.0 / 5.0;
+    let uv_scale = FLOWER_UV_SCALE;
     let uv_offset_x = sprite_index.0 as f32 * uv_scale;
     let uv_offset_y = sprite_index.1 as f32 * uv_scale;
 
@@ -312,8 +313,7 @@ impl GameState {
 
         self.ecosim_tick_accumulator += dt;
         while self.ecosim_tick_accumulator > ECOSIM_SECONDS_PER_TICK {
-            let mut new_entities = ecosim_tick(&mut self.ecosim_entities, &self.chunk);
-            self.ecosim_entities.append(&mut new_entities);
+            ecosim_tick(&mut self.ecosim_entities, &self.chunk);
             self.ecosim_tick_accumulator -= ECOSIM_SECONDS_PER_TICK;
         }
 
