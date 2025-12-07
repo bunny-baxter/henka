@@ -264,6 +264,10 @@ impl GameState {
         self.ecosim_entities.push(EcosimEntity::new(vec3(8, 3, 3)));
         self.ecosim_entities.push(EcosimEntity::new(vec3(9, 3, 4)));
         self.ecosim_entities.push(EcosimEntity::new(vec3(12, 3, 8)));
+        self.ecosim_entities.push(EcosimEntity::new(vec3(12, 3, 8)));
+        self.ecosim_entities.push(EcosimEntity::new(vec3(24, 3, 8)));
+        self.ecosim_entities.push(EcosimEntity::new(vec3(14, 3, 30)));
+        self.ecosim_entities.push(EcosimEntity::new(vec3(6, 3, 2)));
         for e in self.ecosim_entities.iter_mut() {
             e.randomize_genome();
         }

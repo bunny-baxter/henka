@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use cgmath::{Point3, point3, Vector3, vec3};
 use rand::Rng;
@@ -7,13 +7,14 @@ use crate::fixed_point::Fixed;
 use crate::voxel::VoxelChunk;
 
 const FLOWER_MATURITY_AGE: u32 = 20;
-const FLOWER_LIFESPAN: u32 = 45;
+const FLOWER_LIFESPAN: u32 = 120;
 
 pub struct EcosimEntity {
     pub position: Point3<Fixed>,
     pub genome: u32,
     pub age_ticks: u32,
-    pub dead: bool,
+    pub stress: u32,
+    pub dead_ticks: Option<u32>,
 }
 
 impl EcosimEntity {
@@ -27,7 +28,8 @@ impl EcosimEntity {
             ),
             genome: 0,
             age_ticks: 0,
-            dead: false,
+            stress: 0,
+            dead_ticks: None,
         }
     }
 
@@ -44,6 +46,18 @@ impl EcosimEntity {
         self.genome = rng.random();
     }
 
+    fn mutate_genome(&mut self) {
+        const MUTATION_RATE: f32 = 0.05;
+        let mut rng = rand::rng();
+        let mut result = self.genome;
+        for i in 0..32 {
+            if rng.random::<f32>() < MUTATION_RATE {
+                result ^= 1 << i;
+            }
+        }
+        self.genome = result;
+    }
+
     pub fn flower_get_sprite_index(&self) -> (u32, u32) {
         let x = if self.age_ticks < FLOWER_MATURITY_AGE / 2 {
             0
@@ -52,12 +66,12 @@ impl EcosimEntity {
         } else {
             2
         };
-        let y = if self.dead {
+        let y = if self.dead_ticks.is_some() {
             4
         } else {
             let light = self.genome & 0b1 > 0;
             let color = self.genome & 0b10 > 0;
-            if light { if color { 2 } else { 0 } } else { if color { 3 } else { 0 } }
+            if light { if color { 2 } else { 0 } } else { if color { 3 } else { 1 } }
         };
         (x, y)
     }
@@ -105,26 +119,53 @@ fn can_entity_grow_into_coord(coord: Vector3<i32>, voxels: &VoxelChunk) -> bool 
 pub fn ecosim_tick(entities: &mut Vec<EcosimEntity>, voxels: &VoxelChunk) {
     let mut rng = rand::rng();
     let mut new_entities = vec![];
-    let mut occupied_coords: HashSet<Vector3<i32>> = HashSet::new();
+    let mut coord_population: HashMap<Vector3<i32>, u32> = HashMap::new();
+
+    // Increase age and calculate voxel populations
     for entity in entities.iter_mut() {
-        entity.age_ticks += 1;
-        if entity.age_ticks >= FLOWER_LIFESPAN {
-            entity.dead = true;
+        match entity.dead_ticks {
+            Some(ref mut dead_ticks) => *dead_ticks += 1,
+            None => entity.age_ticks += 1,
+        };
+        if entity.age_ticks >= FLOWER_LIFESPAN && rng.random::<f32>() < 0.01 {
+            entity.dead_ticks = Some(0);
         }
-        occupied_coords.insert(entity.voxel_coord());
+        if entity.dead_ticks.is_none() {
+            *coord_population.entry(entity.voxel_coord()).or_insert(0) += 1;
+        }
     }
-    for entity in entities.iter() {
+
+    // Maybe reproduce
+    for entity in entities.iter_mut() {
         let coord_i32 = entity.voxel_coord();
         for &(dx, dy, dz) in ADJACENCIES.iter() {
             let adj = coord_i32 + vec3(dx, dy, dz);
-            if !entity.dead && entity.age_ticks >= FLOWER_MATURITY_AGE && can_entity_grow_into_coord(adj, voxels) && rng.random::<f32>() < 0.02 && !occupied_coords.contains(&adj) {
+            if entity.dead_ticks.is_none() && entity.age_ticks >= FLOWER_MATURITY_AGE && *coord_population.get(&adj).unwrap_or(&0u32) < 6 && can_entity_grow_into_coord(adj, voxels) && rng.random::<f32>() < 0.006 {
                 let mut new_entity = EcosimEntity::new(adj.map(|i| i as usize));
                 new_entity.genome = entity.genome;
+                new_entity.mutate_genome();
                 new_entities.push(new_entity);
-                occupied_coords.insert(adj);
+                *coord_population.entry(adj).or_insert(0) += 1;
+                entity.stress += 200;
             }
         }
     }
-    entities.retain(|entity| entity.age_ticks < FLOWER_LIFESPAN * 2);
+
+    // Resolve stress
+    for entity in entities.iter_mut() {
+        if entity.dead_ticks.is_some() {
+            continue;
+        }
+        let population = *coord_population.get(&entity.voxel_coord()).unwrap();
+        if population >= 2 {
+            let n = population - 1;
+            entity.stress += n * n;
+        }
+        if (entity.age_ticks < FLOWER_MATURITY_AGE && entity.stress >= 200) || (entity.age_ticks >= FLOWER_MATURITY_AGE && entity.stress > 2000) {
+            entity.dead_ticks = Some(0);
+        }
+    }
+
+    entities.retain(|entity| entity.dead_ticks.is_none() || entity.dead_ticks.unwrap() < 8);
     entities.append(&mut new_entities);
 }
