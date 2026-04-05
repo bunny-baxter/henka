@@ -103,7 +103,7 @@ pub const VOXEL_SCALE: f32 = 0.5;
 const VOXEL_SIZE: Vector3<f32> = vec3(VOXEL_SCALE, VOXEL_SCALE, VOXEL_SCALE);
 
 pub struct VoxelChunk {
-    voxels: Array3D,
+    voxels: Array3D<i32>,
     cached_vertices: RefCell<Option<Vec<Vertex>>>,
 }
 
@@ -128,11 +128,11 @@ impl VoxelChunk {
     }
 
     pub fn get_voxel(&self, coord: Vector3<usize>) -> i32 {
-        self.voxels.get(coord)
+        *self.voxels.get(coord)
     }
 
     pub fn get_voxel_i32(&self, coord: Vector3<i32>) -> i32 {
-        self.voxels.get_i32(coord)
+        *self.voxels.get_i32(coord)
     }
 
     pub fn set_voxel(&mut self, coord: Vector3<usize>, value: i32) {
@@ -145,7 +145,7 @@ impl VoxelChunk {
         if self.voxels.is_i32_out_of_bounds(adjacent_position) {
             return true;
         }
-        return self.voxels.get_i32(adjacent_position) == 0;
+        return *self.voxels.get_i32(adjacent_position) == 0;
     }
 
     fn create_vertices(&self) -> Vec<Vertex> {
@@ -154,7 +154,7 @@ impl VoxelChunk {
             for j in 0..self.voxels.size.y as i32 {
                 for k in 0..self.voxels.size.z as i32 {
                     let coord = vec3(i, j, k);
-                    if self.voxels.get_i32(coord) > 0 {
+                    if *self.voxels.get_i32(coord) > 0 {
                         let offset = vec3(coord.x as f32 * VOXEL_SIZE.x, coord.y as f32 * VOXEL_SIZE.y, coord.z as f32 * VOXEL_SIZE.z);
                         let face_description = CubeFaceDescription {
                             render_posx_face: self.is_face_visible(coord, vec3(1, 0, 0)),

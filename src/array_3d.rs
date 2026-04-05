@@ -5,17 +5,18 @@ pub fn vec_i32_as_usize(v: Vector3<i32>) -> Vector3<usize> {
 }
 
 #[derive(Clone)]
-pub struct Array3D {
+pub struct Array3D<T: Clone + Default> {
     pub size: Vector3<usize>,
-    data: Vec<i32>,
+    data: Vec<T>,
 }
 
-impl Array3D {
+#[allow(unused)]
+impl<T: Clone + Default> Array3D<T> {
     pub fn new(size: Vector3<usize>) -> Self {
         let flat_size = size.x * size.y * size.z;
         Array3D {
             size: size,
-            data: vec![ 0 ; flat_size ],
+            data: vec![ T::default() ; flat_size ],
         }
     }
 
@@ -23,7 +24,6 @@ impl Array3D {
         coord.z * self.size.x * self.size.y + coord.y * self.size.x + coord.x
     }
 
-    #[allow(unused)]
     fn index_to_coord(&self, index: usize) -> Vector3<usize> {
         let z = index / (self.size.x * self.size.y);
         let remainder = index % (self.size.x * self.size.y);
@@ -43,20 +43,29 @@ impl Array3D {
         self.is_out_of_bounds(vec_i32_as_usize(coord))
     }
 
-    pub fn get(&self, coord: Vector3<usize>) -> i32 {
-        self.data[self.coord_to_index(coord)]
+    pub fn get(&self, coord: Vector3<usize>) -> &T {
+        &self.data[self.coord_to_index(coord)]
     }
 
-    pub fn get_i32(&self, coord: Vector3<i32>) -> i32 {
+    pub fn get_i32(&self, coord: Vector3<i32>) -> &T {
         self.get(vec_i32_as_usize(coord))
     }
 
-    pub fn set(&mut self, coord: Vector3<usize>, value: i32) {
+    pub fn get_mut(&mut self, coord: Vector3<usize>) -> &mut T {
+        let index = self.coord_to_index(coord);
+        &mut self.data[index]
+    }
+
+    pub fn get_mut_i32(&mut self, coord: Vector3<i32>) -> &mut T {
+        self.get_mut(vec_i32_as_usize(coord))
+    }
+
+    pub fn set(&mut self, coord: Vector3<usize>, value: T) {
         let index = self.coord_to_index(coord);
         self.data[index] = value;
     }
 
-    pub fn set_i32(&mut self, coord: Vector3<i32>, value: i32) {
+    pub fn set_i32(&mut self, coord: Vector3<i32>, value: T) {
         self.set(vec_i32_as_usize(coord), value);
     }
 }
@@ -67,14 +76,14 @@ mod tests {
 
     #[test]
     fn test_create_array() {
-        let a = Array3D::new(vec3(3, 4, 5));
+        let a = Array3D::<i32>::new(vec3(3, 4, 5));
         assert_eq!(vec3(3, 4, 5), a.size);
         assert_eq!(60, a.data.len());
     }
 
     #[test]
     fn test_coord_to_index() {
-        let a = Array3D::new(vec3(5, 4, 3));
+        let a = Array3D::<i32>::new(vec3(5, 4, 3));
         assert_eq!(0, a.coord_to_index(vec3(0, 0, 0)));
         assert_eq!(33, a.coord_to_index(vec3(3, 2, 1)));
         assert_eq!(59, a.coord_to_index(vec3(4, 3, 2)));
@@ -82,7 +91,7 @@ mod tests {
 
     #[test]
     fn test_index_to_coord() {
-        let a = Array3D::new(vec3(5, 4, 3));
+        let a = Array3D::<i32>::new(vec3(5, 4, 3));
         assert_eq!(vec3(0, 0, 0), a.index_to_coord(0));
         assert_eq!(vec3(3, 2, 1), a.index_to_coord(33));
         assert_eq!(vec3(4, 3, 2), a.index_to_coord(59));
@@ -90,7 +99,7 @@ mod tests {
 
     #[test]
     fn test_out_of_bounds() {
-        let a = Array3D::new(vec3(2, 2, 2));
+        let a = Array3D::<i32>::new(vec3(2, 2, 2));
         assert!(!a.is_out_of_bounds(vec3(0, 0, 0)));
         assert!(a.is_out_of_bounds(vec3(0, 0, 2)));
         assert!(a.is_out_of_bounds(vec3(0, 2, 0)));
@@ -107,11 +116,11 @@ mod tests {
 
     #[test]
     fn test_set_and_get() {
-        let mut a = Array3D::new(vec3(3, 3, 3));
+        let mut a = Array3D::<i32>::new(vec3(3, 3, 3));
         a.set(vec3(0, 0, 0), 4);
-        assert_eq!(4, a.get(vec3(0, 0, 0)));
+        assert_eq!(&4, a.get(vec3(0, 0, 0)));
 
         a.set_i32(vec3(0, 1, 2), 9);
-        assert_eq!(9, a.get_i32(vec3(0, 1, 2)));
+        assert_eq!(&9, a.get_i32(vec3(0, 1, 2)));
     }
 }
