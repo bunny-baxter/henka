@@ -105,36 +105,36 @@ fn create_pyramid_mesh(offset: Point3<f32>, base_size: f32, height: f32) -> Vec<
 
     // Front face
     let front_normal = calc_normal(base_v0_pos, apex_pos, base_v1_pos);
-    let front_v0 = Vertex { position: base_v0_pos, color: YELLOW, uv: [0.0, 0.0], normal: front_normal };
-    let front_apex = Vertex { position: apex_pos, color: YELLOW, uv: [0.5, 0.5], normal: front_normal };
-    let front_v1 = Vertex { position: base_v1_pos, color: YELLOW, uv: [1.0, 0.0], normal: front_normal };
+    let front_v0 = Vertex { position: base_v0_pos, light: YELLOW, uv: [0.0, 0.0], normal: front_normal };
+    let front_apex = Vertex { position: apex_pos, light: YELLOW, uv: [0.5, 0.5], normal: front_normal };
+    let front_v1 = Vertex { position: base_v1_pos, light: YELLOW, uv: [1.0, 0.0], normal: front_normal };
 
     // Right face
     let right_normal = calc_normal(base_v1_pos, apex_pos, base_v2_pos);
-    let right_v1 = Vertex { position: base_v1_pos, color: YELLOW, uv: [0.0, 0.0], normal: right_normal };
-    let right_apex = Vertex { position: apex_pos, color: YELLOW, uv: [0.5, 0.5], normal: right_normal };
-    let right_v2 = Vertex { position: base_v2_pos, color: YELLOW, uv: [1.0, 0.0], normal: right_normal };
+    let right_v1 = Vertex { position: base_v1_pos, light: YELLOW, uv: [0.0, 0.0], normal: right_normal };
+    let right_apex = Vertex { position: apex_pos, light: YELLOW, uv: [0.5, 0.5], normal: right_normal };
+    let right_v2 = Vertex { position: base_v2_pos, light: YELLOW, uv: [1.0, 0.0], normal: right_normal };
 
     // Back face
     let back_normal = calc_normal(base_v2_pos, apex_pos, base_v3_pos);
-    let back_v2 = Vertex { position: base_v2_pos, color: YELLOW, uv: [0.0, 0.0], normal: back_normal };
-    let back_apex = Vertex { position: apex_pos, color: YELLOW, uv: [0.5, 0.5], normal: back_normal };
-    let back_v3 = Vertex { position: base_v3_pos, color: YELLOW, uv: [1.0, 0.0], normal: back_normal };
+    let back_v2 = Vertex { position: base_v2_pos, light: YELLOW, uv: [0.0, 0.0], normal: back_normal };
+    let back_apex = Vertex { position: apex_pos, light: YELLOW, uv: [0.5, 0.5], normal: back_normal };
+    let back_v3 = Vertex { position: base_v3_pos, light: YELLOW, uv: [1.0, 0.0], normal: back_normal };
 
     // Left face
     let left_normal = calc_normal(base_v3_pos, apex_pos, base_v0_pos);
-    let left_v3 = Vertex { position: base_v3_pos, color: YELLOW, uv: [0.0, 0.0], normal: left_normal };
-    let left_apex = Vertex { position: apex_pos, color: YELLOW, uv: [0.5, 0.5], normal: left_normal };
-    let left_v0 = Vertex { position: base_v0_pos, color: YELLOW, uv: [1.0, 0.0], normal: left_normal };
+    let left_v3 = Vertex { position: base_v3_pos, light: YELLOW, uv: [0.0, 0.0], normal: left_normal };
+    let left_apex = Vertex { position: apex_pos, light: YELLOW, uv: [0.5, 0.5], normal: left_normal };
+    let left_v0 = Vertex { position: base_v0_pos, light: YELLOW, uv: [1.0, 0.0], normal: left_normal };
 
     // Base (two triangles) - normal points downward
     let base_normal = calc_normal(base_v0_pos, base_v1_pos, base_v2_pos);
-    let base1_v0 = Vertex { position: base_v0_pos, color: YELLOW, uv: [0.0, 0.0], normal: base_normal };
-    let base1_v1 = Vertex { position: base_v1_pos, color: YELLOW, uv: [1.0, 0.0], normal: base_normal };
-    let base1_v2 = Vertex { position: base_v2_pos, color: YELLOW, uv: [1.0, 1.0], normal: base_normal };
-    let base2_v0 = Vertex { position: base_v0_pos, color: YELLOW, uv: [0.0, 0.0], normal: base_normal };
-    let base2_v2 = Vertex { position: base_v2_pos, color: YELLOW, uv: [1.0, 1.0], normal: base_normal };
-    let base2_v3 = Vertex { position: base_v3_pos, color: YELLOW, uv: [0.0, 1.0], normal: base_normal };
+    let base1_v0 = Vertex { position: base_v0_pos, light: YELLOW, uv: [0.0, 0.0], normal: base_normal };
+    let base1_v1 = Vertex { position: base_v1_pos, light: YELLOW, uv: [1.0, 0.0], normal: base_normal };
+    let base1_v2 = Vertex { position: base_v2_pos, light: YELLOW, uv: [1.0, 1.0], normal: base_normal };
+    let base2_v0 = Vertex { position: base_v0_pos, light: YELLOW, uv: [0.0, 0.0], normal: base_normal };
+    let base2_v2 = Vertex { position: base_v2_pos, light: YELLOW, uv: [1.0, 1.0], normal: base_normal };
+    let base2_v3 = Vertex { position: base_v3_pos, light: YELLOW, uv: [0.0, 1.0], normal: base_normal };
 
     vec![
         // Front face
@@ -177,10 +177,10 @@ fn get_entity_vertices(entity: &EcosimEntity, camera_pos: Point3<f32>) -> Vec<Ve
 
     let normal = calc_normal(base_left_pos, base_right_pos, top_left_pos);
 
-    let base_left = Vertex { position: base_left_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y + uv_scale], normal };
-    let base_right = Vertex { position: base_right_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y + uv_scale], normal };
-    let top_left = Vertex { position: top_left_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x, uv_offset_y], normal };
-    let top_right = Vertex { position: top_right_pos, color: [1.0, 1.0, 1.0], uv: [uv_offset_x + uv_scale, uv_offset_y], normal };
+    let base_left = Vertex { position: base_left_pos, light: [0.0, 0.0, 0.0], uv: [uv_offset_x, uv_offset_y + uv_scale], normal };
+    let base_right = Vertex { position: base_right_pos, light: [0.0, 0.0, 0.0], uv: [uv_offset_x + uv_scale, uv_offset_y + uv_scale], normal };
+    let top_left = Vertex { position: top_left_pos, light: [0.0, 0.0, 0.0], uv: [uv_offset_x, uv_offset_y], normal };
+    let top_right = Vertex { position: top_right_pos, light: [0.0, 0.0, 0.0], uv: [uv_offset_x + uv_scale, uv_offset_y], normal };
 
     vec![
         base_left, top_left, top_right,

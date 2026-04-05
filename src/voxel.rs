@@ -41,57 +41,57 @@ fn create_cube_mesh(offset: Vector3<f32>, size: Vector3<f32>, face_description: 
     let mut verts = vec![];
     if face_description.render_negx_face {
         const NORMAL: [f32; 3] = [-1.0, 0.0, 0.0];
-        verts.push(Vertex { position: positions[0], color: [1.0, 0.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[1], color: [1.0, 0.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[4], color: [1.0, 0.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[0], color: [1.0, 0.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[4], color: [1.0, 0.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[2], color: [1.0, 0.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[0], light: [0.0, 0.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[1], light: [0.0, 0.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[4], light: [0.0, 0.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[0], light: [0.0, 0.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[4], light: [0.0, 0.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[2], light: [0.0, 0.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
     }
     if face_description.render_negy_face {
         const NORMAL: [f32; 3] = [0.0, -1.0, 0.0];
-        verts.push(Vertex { position: positions[0], color: [0.0, 1.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[5], color: [0.0, 1.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[1], color: [0.0, 1.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[0], color: [0.0, 1.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[3], color: [0.0, 1.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[5], color: [0.0, 1.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[0], light: [0.0, 0.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[5], light: [0.0, 0.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[1], light: [0.0, 0.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[0], light: [0.0, 0.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[3], light: [0.0, 0.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[5], light: [0.0, 0.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
     }
     if face_description.render_negz_face {
         const NORMAL: [f32; 3] = [0.0, 0.0, -1.0];
-        verts.push(Vertex { position: positions[0], color: [0.0, 0.0, 1.0], uv: [1.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[6], color: [0.0, 0.0, 1.0], uv: [0.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[3], color: [0.0, 0.0, 1.0], uv: [0.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[0], color: [0.0, 0.0, 1.0], uv: [1.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[2], color: [0.0, 0.0, 1.0], uv: [1.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[6], color: [0.0, 0.0, 1.0], uv: [0.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[0], light: [0.0, 0.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[6], light: [0.0, 0.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[3], light: [0.0, 0.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[0], light: [0.0, 0.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[2], light: [0.0, 0.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[6], light: [0.0, 0.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
     }
     if face_description.render_posx_face {
         const NORMAL: [f32; 3] = [1.0, 0.0, 0.0];
-        verts.push(Vertex { position: positions[7], color: [1.0, 0.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[3], color: [1.0, 0.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[6], color: [1.0, 0.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[7], color: [1.0, 0.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[5], color: [1.0, 0.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[3], color: [1.0, 0.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[7], light: [0.0, 0.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[3], light: [0.0, 0.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[6], light: [0.0, 0.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[7], light: [0.0, 0.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[5], light: [0.0, 0.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[3], light: [0.0, 0.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
     }
     if face_description.render_posy_face {
         const NORMAL: [f32; 3] = [0.0, 1.0, 0.0];
-        verts.push(Vertex { position: positions[7], color: [0.0, 1.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[6], color: [0.0, 1.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[2], color: [0.0, 1.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[7], color: [0.0, 1.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[2], color: [0.0, 1.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[4], color: [0.0, 1.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[7], light: [0.0, 0.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[6], light: [0.0, 0.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[2], light: [0.0, 0.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[7], light: [0.0, 0.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[2], light: [0.0, 0.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[4], light: [0.0, 0.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
     }
     if face_description.render_posz_face {
         const NORMAL: [f32; 3] = [0.0, 0.0, 1.0];
-        verts.push(Vertex { position: positions[7], color: [0.0, 0.0, 1.0], uv: [1.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[4], color: [0.0, 0.0, 1.0], uv: [0.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[1], color: [0.0, 0.0, 1.0], uv: [0.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[7], color: [0.0, 0.0, 1.0], uv: [1.0, 0.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[1], color: [0.0, 0.0, 1.0], uv: [0.0, 1.0], normal: NORMAL });
-        verts.push(Vertex { position: positions[5], color: [0.0, 0.0, 1.0], uv: [1.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[7], light: [0.0, 0.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[4], light: [0.0, 0.0, 0.0], uv: [0.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[1], light: [0.0, 0.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[7], light: [0.0, 0.0, 0.0], uv: [1.0, 0.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[1], light: [0.0, 0.0, 0.0], uv: [0.0, 1.0], normal: NORMAL });
+        verts.push(Vertex { position: positions[5], light: [0.0, 0.0, 0.0], uv: [1.0, 1.0], normal: NORMAL });
     }
     verts
 }
