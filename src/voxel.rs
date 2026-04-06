@@ -3,6 +3,8 @@ use cgmath::{Vector3, vec3};
 use crate::array_3d::Array3D;
 use crate::render_util::Vertex;
 
+type VoxelType = u32;
+
 struct CubeFaceDescription {
     render_posx_face: bool,
     render_negx_face: bool,
@@ -101,7 +103,7 @@ pub const VOXEL_SCALE: f32 = 0.5;
 const VOXEL_SIZE: Vector3<f32> = vec3(VOXEL_SCALE, VOXEL_SCALE, VOXEL_SCALE);
 
 pub struct VoxelChunk {
-    voxels: Array3D<i32>,
+    voxels: Array3D<VoxelType>,
     per_voxel_vertices: Array3D<Vec<Vertex>>,
     geometry_dirty: bool,
 }
@@ -115,23 +117,19 @@ impl VoxelChunk {
         }
     }
 
-    pub fn is_out_of_bounds(&self, coord: Vector3<usize>) -> bool {
-        self.voxels.is_out_of_bounds(coord)
-    }
-
     pub fn is_i32_out_of_bounds(&self, coord: Vector3<i32>) -> bool {
         self.voxels.is_i32_out_of_bounds(coord)
     }
 
-    pub fn get_voxel(&self, coord: Vector3<usize>) -> i32 {
+    pub fn get_voxel(&self, coord: Vector3<usize>) -> VoxelType {
         *self.voxels.get(coord)
     }
 
-    pub fn get_voxel_i32(&self, coord: Vector3<i32>) -> i32 {
+    pub fn get_voxel_i32(&self, coord: Vector3<i32>) -> VoxelType {
         *self.voxels.get_i32(coord)
     }
 
-    pub fn set_voxel(&mut self, coord: Vector3<usize>, value: i32) {
+    pub fn set_voxel(&mut self, coord: Vector3<usize>, value: VoxelType) {
         self.voxels.set(coord, value);
         self.geometry_dirty = true;
     }

@@ -77,12 +77,6 @@ impl EcosimEntity {
     }
 }
 
-pub fn flower_get_sprite_index(genome: u32) -> (u32, u32) {
-    let x = if genome & 0b1 > 0 { 1 } else { 0 };
-    let y = if genome & 0b10 > 0 { 1 } else { 0 };
-    (x, y)
-}
-
 const ADJACENCIES: &[(i32, i32, i32)] = &[
     (1, 0, 0),
     (0, 1, 0),
