@@ -284,6 +284,16 @@ impl GameState {
         };
     }
 
+    fn calculate_light(&mut self) {
+        for i in 0..CHUNK_SIZE.x {
+            for j in 0..CHUNK_SIZE.y {
+                for k in 0..CHUNK_SIZE.z {
+                    self.chunk.set_voxel_light(vec3(i, j, k), [i as f32 / CHUNK_SIZE.x as f32, k as f32 / CHUNK_SIZE.z as f32, 1.0]);
+                }
+            }
+        }
+    }
+
     pub fn update(&mut self, dt: f64, input_state: &InputState) {
         self.physics_tick_accumulator += dt;
         while self.physics_tick_accumulator > PHYSICS_SECONDS_PER_TICK {
@@ -371,6 +381,8 @@ impl GameState {
             self.camera.target = self.player.get_center_f32();
             self.camera.position = self.orbit_camera_controller.get_camera_position(&self.camera.target);
         }
+
+        self.calculate_light();
     }
 
     pub fn get_voxel_vertices(&mut self) -> Vec<Vertex> {

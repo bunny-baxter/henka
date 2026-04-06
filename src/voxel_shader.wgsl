@@ -21,7 +21,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
-    @location(1) light_mag: f32,
+    @location(1) light: vec3<f32>,
 };
 
 
@@ -32,7 +32,7 @@ fn vs_main(
     var out: VertexOutput;
     out.clip_position = camera.view_projection * vec4<f32>(model.position, 1.0);
     out.uv = model.uv;
-    out.light_mag = abs(dot(model.normal, LIGHT_DIRECTION));
+    out.light = model.light;
     return out;
 }
 
@@ -43,6 +43,6 @@ fn vs_main(
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let texture_color = textureSample(texture_view, texture_sampler, in.uv);
     let blended_color = mix(FACE_COLOR, texture_color.rgb, 0.35);
-    let lit_color = blended_color * in.light_mag;
+    let lit_color = blended_color * in.light;
     return vec4<f32>(lit_color, 1.0);
 }
