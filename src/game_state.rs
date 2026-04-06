@@ -373,9 +373,8 @@ impl GameState {
         }
     }
 
-    pub fn get_voxel_vertices(&self) -> Vec<Vertex> {
-        let mut vertices = vec![];
-        vertices.append(&mut self.chunk.get_vertices().clone());
+    pub fn get_voxel_vertices(&mut self) -> Vec<Vertex> {
+        let mut vertices = self.chunk.get_vertices();
         // Center the player model on the hitbox base
         vertices.append(&mut create_pyramid_mesh(
                 self.player.get_center_base_f32(),

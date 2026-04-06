@@ -1,5 +1,3 @@
-use std::cell::{Ref, RefCell};
-
 use cgmath::{Vector3, vec3};
 
 use crate::array_3d::Array3D;
@@ -104,19 +102,17 @@ const VOXEL_SIZE: Vector3<f32> = vec3(VOXEL_SCALE, VOXEL_SCALE, VOXEL_SCALE);
 
 pub struct VoxelChunk {
     voxels: Array3D<i32>,
-    cached_vertices: RefCell<Option<Vec<Vertex>>>,
+    per_voxel_vertices: Array3D<Vec<Vertex>>,
+    geometry_dirty: bool,
 }
 
 impl VoxelChunk {
     pub fn new() -> Self {
         VoxelChunk {
             voxels: Array3D::new(CHUNK_SIZE),
-            cached_vertices: None.into(),
+            per_voxel_vertices: Array3D::new(CHUNK_SIZE),
+            geometry_dirty: true,
         }
-    }
-
-    fn clear_cached_vertices(&mut self) {
-        *self.cached_vertices.borrow_mut() = None;
     }
 
     pub fn is_out_of_bounds(&self, coord: Vector3<usize>) -> bool {
@@ -136,8 +132,8 @@ impl VoxelChunk {
     }
 
     pub fn set_voxel(&mut self, coord: Vector3<usize>, value: i32) {
-        self.clear_cached_vertices();
         self.voxels.set(coord, value);
+        self.geometry_dirty = true;
     }
 
     fn is_face_visible(&self, voxel_position: Vector3<i32>, face_direction: Vector3<i32>) -> bool {
@@ -148,34 +144,53 @@ impl VoxelChunk {
         return *self.voxels.get_i32(adjacent_position) == 0;
     }
 
-    fn create_vertices(&self) -> Vec<Vertex> {
-        let mut result = vec![];
+    fn create_voxel_vertices(&self, coord: Vector3<i32>) -> Vec<Vertex> {
+        if *self.voxels.get_i32(coord) <= 0 {
+            return vec![];
+        }
+        let offset = vec3(coord.x as f32 * VOXEL_SIZE.x, coord.y as f32 * VOXEL_SIZE.y, coord.z as f32 * VOXEL_SIZE.z);
+        let face_description = CubeFaceDescription {
+            render_posx_face: self.is_face_visible(coord, vec3(1, 0, 0)),
+            render_negx_face: self.is_face_visible(coord, vec3(-1, 0, 0)),
+            render_posy_face: self.is_face_visible(coord, vec3(0, 1, 0)),
+            render_negy_face: self.is_face_visible(coord, vec3(0, -1, 0)),
+            render_posz_face: self.is_face_visible(coord, vec3(0, 0, 1)),
+            render_negz_face: self.is_face_visible(coord, vec3(0, 0, -1)),
+        };
+        create_cube_mesh(offset, VOXEL_SIZE, face_description)
+    }
+
+    fn rebuild_all_vertices(&mut self) {
         for i in 0..self.voxels.size.x as i32 {
             for j in 0..self.voxels.size.y as i32 {
                 for k in 0..self.voxels.size.z as i32 {
                     let coord = vec3(i, j, k);
-                    if *self.voxels.get_i32(coord) > 0 {
-                        let offset = vec3(coord.x as f32 * VOXEL_SIZE.x, coord.y as f32 * VOXEL_SIZE.y, coord.z as f32 * VOXEL_SIZE.z);
-                        let face_description = CubeFaceDescription {
-                            render_posx_face: self.is_face_visible(coord, vec3(1, 0, 0)),
-                            render_negx_face: self.is_face_visible(coord, vec3(-1, 0, 0)),
-                            render_posy_face: self.is_face_visible(coord, vec3(0, 1, 0)),
-                            render_negy_face: self.is_face_visible(coord, vec3(0, -1, 0)),
-                            render_posz_face: self.is_face_visible(coord, vec3(0, 0, 1)),
-                            render_negz_face: self.is_face_visible(coord, vec3(0, 0, -1)),
-                        };
-                        result.extend(create_cube_mesh(offset, VOXEL_SIZE, face_description));
-                    }
+                    let verts = self.create_voxel_vertices(coord);
+                    self.per_voxel_vertices.set_i32(coord, verts);
+                }
+            }
+        }
+        self.geometry_dirty = false;
+    }
+
+    pub fn set_voxel_light(&mut self, coord: Vector3<usize>, light: [f32; 3]) {
+        for vert in self.per_voxel_vertices.get_mut(coord) {
+            vert.light = light;
+        }
+    }
+
+    pub fn get_vertices(&mut self) -> Vec<Vertex> {
+        if self.geometry_dirty {
+            self.rebuild_all_vertices();
+        }
+        let mut result = vec![];
+        for i in 0..self.per_voxel_vertices.size.x {
+            for j in 0..self.per_voxel_vertices.size.y {
+                for k in 0..self.per_voxel_vertices.size.z {
+                    result.extend_from_slice(self.per_voxel_vertices.get(vec3(i, j, k)));
                 }
             }
         }
         result
-    }
-
-    pub fn get_vertices(&self) -> Ref<'_, Vec<Vertex>> {
-        if self.cached_vertices.borrow().is_none() {
-            *self.cached_vertices.borrow_mut() = Some(self.create_vertices());
-        }
-        Ref::map(self.cached_vertices.borrow(), |option| option.as_ref().unwrap())
     }
 }
