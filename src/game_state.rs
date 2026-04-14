@@ -201,6 +201,7 @@ pub struct GameState {
     pub player: PlayerActor,
     ecosim_tick_accumulator: f64,
     pub ecosim_entities: Vec<EcosimEntity>,
+    pub sun_position: Vector3<f32>,
 }
 
 impl GameState {
@@ -228,6 +229,7 @@ impl GameState {
             player,
             ecosim_tick_accumulator: 0.0,
             ecosim_entities: vec![],
+            sun_position: vec3(0.18814417, -0.94072087, 0.28221626),
         }
     }
 

@@ -14,6 +14,26 @@ use wgpu::util::DeviceExt;
 use wgpu_text::{glyph_brush::{Section as TextSection, OwnedText, ab_glyph::FontRef, OwnedSection}, BrushBuilder, TextBrush};
 
 use crate::camera::CameraUniform;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct LightingUniform {
+    sun_position: [f32; 3],
+    _padding: f32,
+}
+
+impl LightingUniform {
+    fn new() -> Self {
+        Self {
+            sun_position: [0.0, 0.0, 0.0],
+            _padding: 0.0,
+        }
+    }
+
+    fn set_sun_position(&mut self, position: cgmath::Vector3<f32>) {
+        self.sun_position = [position.x, position.y, position.z];
+    }
+}
 use crate::game_state::GameState;
 use crate::render_util::{MovingAverage, Vertex};
 use crate::texture::{DepthTexture, Texture};
@@ -38,6 +58,9 @@ struct RenderState<'a> {
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    lighting_uniform: LightingUniform,
+    lighting_buffer: wgpu::Buffer,
+    lighting_bind_group: wgpu::BindGroup,
     #[allow(unused)]
     voxel_texture: Texture,
     voxel_texture_bind_group: wgpu::BindGroup,
@@ -138,6 +161,39 @@ impl RenderState<'_> {
                 }
             ],
             label: Some("camera_bind_group"),
+        });
+
+        let lighting_uniform = LightingUniform::new();
+        let lighting_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Lighting Buffer"),
+                contents: bytemuck::cast_slice(&[lighting_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+        let lighting_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+            label: Some("lighting_bind_group_layout"),
+        });
+        let lighting_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &lighting_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: lighting_buffer.as_entire_binding(),
+                }
+            ],
+            label: Some("lighting_bind_group"),
         });
 
         let voxel_texture_bytes = include_bytes!("../textures/noise_128.png");
@@ -252,9 +308,16 @@ impl RenderState<'_> {
             None
         };
 
-        let render_pipeline_layout =
+        let voxel_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
+                label: Some("Voxel Pipeline Layout"),
+                bind_group_layouts: &[&camera_bind_group_layout, &lighting_bind_group_layout, &texture_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        let flower_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Flower Pipeline Layout"),
                 bind_group_layouts: &[&camera_bind_group_layout, &texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
@@ -262,7 +325,7 @@ impl RenderState<'_> {
         let voxel_shader = device.create_shader_module(wgpu::include_wgsl!("voxel_shader.wgsl"));
         let voxel_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
+            layout: Some(&voxel_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &voxel_shader,
                 entry_point: Some("vs_main"),
@@ -301,7 +364,7 @@ impl RenderState<'_> {
         let flower_shader = device.create_shader_module(wgpu::include_wgsl!("flower_shader.wgsl"));
         let flower_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Flower Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
+            layout: Some(&flower_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &flower_shader,
                 entry_point: Some("vs_main"),
@@ -350,6 +413,9 @@ impl RenderState<'_> {
             camera_uniform,
             camera_buffer,
             camera_bind_group,
+            lighting_uniform,
+            lighting_buffer,
+            lighting_bind_group,
             voxel_texture,
             voxel_texture_bind_group,
             flower_texture,
@@ -362,6 +428,7 @@ impl RenderState<'_> {
 
     fn write_buffers(&mut self) {
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+        self.queue.write_buffer(&self.lighting_buffer, 0, bytemuck::cast_slice(&[self.lighting_uniform]));
         self.text_brush.queue(&self.device, &self.queue, [&self.text_section]).unwrap();
     }
 
@@ -420,7 +487,8 @@ impl RenderState<'_> {
             // Render voxels
             render_pass.set_pipeline(&self.voxel_render_pipeline);
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.voxel_texture_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.lighting_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.voxel_texture_bind_group, &[]);
             render_pass.set_vertex_buffer(0, voxel_vertex_buffer.slice(..));
             let n_vertices = voxel_vertices.len() as u32;
             render_pass.draw(0..n_vertices, 0..1);
@@ -569,7 +637,9 @@ impl<'a> App<'a> {
         self.game_state.update(dt, &self.input_state);
         self.input_state.mouse_delta = vec2(0.0, 0.0);
         let view_projection = self.game_state.camera.build_view_projection_matrix();
+        let sun_position = self.game_state.sun_position;
         self.render_state_mut().camera_uniform.set_view_projection(view_projection);
+        self.render_state_mut().lighting_uniform.set_sun_position(sun_position);
         if self.frame_count % 20 == 0 {
             let fps_str = format!("{:.2} fps \n", 1.0 / self.frame_delta.get_average());
             let update_time_str = format!("update: {:.2}ms \n", self.update_time.get_average());
