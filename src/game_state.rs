@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use cgmath::{InnerSpace, Point3, point3, Vector2, vec2, Vector3, vec3};
 use winit::keyboard::KeyCode;
 
@@ -79,6 +81,10 @@ impl PlayerActor {
 
 fn point3_to_array(p: Point3<f32>) -> [f32; 3] {
     [p.x, p.y, p.z]
+}
+
+fn vector3_to_array(v: Vector3<f32>) -> [f32; 3] {
+    [v.x, v.y, v.z]
 }
 
 fn calc_normal(p0: [f32; 3], p1: [f32; 3], p2: [f32; 3]) -> [f32; 3] {
@@ -229,7 +235,7 @@ impl GameState {
             player,
             ecosim_tick_accumulator: 0.0,
             ecosim_entities: vec![],
-            sun_position: vec3(0.18814417, -0.94072087, 0.28221626),
+            sun_position: vec3(0.0, -(PI / 8.0).sin(), (PI / 8.0).cos()),
         }
     }
 
@@ -395,6 +401,39 @@ impl GameState {
                 self.player.body.collision_size.x.to_f32() * VOXEL_SCALE,
                 self.player.body.collision_size.y.to_f32() * VOXEL_SCALE));
         vertices
+    }
+
+    pub fn get_sun_vertices(&self) -> Vec<Vertex> {
+        const SUN_QUAD_SIZE: f32 = 25.0;
+        const SUN_DISTANCE: f32 = 100.0;
+
+        let sun_dir = (-self.sun_position).normalize();
+        let center = self.camera.position + sun_dir * SUN_DISTANCE;
+
+        let world_up = vec3(0.0, 1.0, 0.0);
+        let right = world_up.cross(sun_dir).normalize() * (SUN_QUAD_SIZE / 2.0);
+        let up = sun_dir.cross(right.normalize()).normalize() * (SUN_QUAD_SIZE / 2.0);
+
+        // Always upright version
+        //let forward = (self.camera.target - self.camera.position).normalize();
+        //let right = forward.cross(vec3(0.0, 1.0, 0.0)).normalize() * (SUN_QUAD_SIZE / 2.0);
+        //let up = forward.cross(right.normalize()).normalize() * (SUN_QUAD_SIZE / 2.0);
+
+        let bl = point3_to_array(center - right - up);
+        let br = point3_to_array(center + right - up);
+        let tl = point3_to_array(center - right + up);
+        let tr = point3_to_array(center + right + up);
+
+        let normal = vector3_to_array(sun_dir);
+
+        vec![
+            Vertex { position: bl, light: [0.0, 0.0, 0.0], uv: [0.0, 1.0], normal },
+            Vertex { position: tl, light: [0.0, 0.0, 0.0], uv: [0.0, 0.0], normal },
+            Vertex { position: tr, light: [0.0, 0.0, 0.0], uv: [1.0, 0.0], normal },
+            Vertex { position: tr, light: [0.0, 0.0, 0.0], uv: [1.0, 0.0], normal },
+            Vertex { position: br, light: [0.0, 0.0, 0.0], uv: [1.0, 1.0], normal },
+            Vertex { position: bl, light: [0.0, 0.0, 0.0], uv: [0.0, 1.0], normal },
+        ]
     }
 
     pub fn get_flower_vertices(&self) -> Vec<Vertex> {

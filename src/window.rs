@@ -53,7 +53,7 @@ struct RenderState<'a> {
     config: wgpu::SurfaceConfiguration,
     timestamp_query_state: Option<TimestampQueryState>,
     voxel_render_pipeline: wgpu::RenderPipeline,
-    flower_render_pipeline: wgpu::RenderPipeline,
+    sprite_render_pipeline: wgpu::RenderPipeline,
     depth_texture: DepthTexture,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
@@ -67,6 +67,9 @@ struct RenderState<'a> {
     #[allow(unused)]
     flower_texture: Texture,
     flower_texture_bind_group: wgpu::BindGroup,
+    #[allow(unused)]
+    sun_texture: Texture,
+    sun_texture_bind_group: wgpu::BindGroup,
     #[allow(unused)]
     font: &'a [u8],
     text_brush: TextBrush<FontRef<'a>>,
@@ -254,6 +257,24 @@ impl RenderState<'_> {
             label: Some("flower_texture_bind_group"),
         });
 
+        let sun_texture_bytes = include_bytes!("../textures/sun.png");
+        let sun_texture = Texture::from_bytes(&device, &queue, sun_texture_bytes, "sun_texture").unwrap();
+
+        let sun_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(&sun_texture.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&sun_texture.view),
+                },
+            ],
+            label: Some("sun_texture_bind_group"),
+        });
+
         let depth_stencil_state = wgpu::DepthStencilState {
             format: DepthTexture::DEPTH_FORMAT,
             depth_write_enabled: true,
@@ -315,9 +336,9 @@ impl RenderState<'_> {
                 push_constant_ranges: &[],
             });
 
-        let flower_pipeline_layout =
+        let sprite_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Flower Pipeline Layout"),
+                label: Some("Sprite Pipeline Layout"),
                 bind_group_layouts: &[&camera_bind_group_layout, &texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
@@ -361,18 +382,18 @@ impl RenderState<'_> {
             cache: None,
         });
 
-        let flower_shader = device.create_shader_module(wgpu::include_wgsl!("flower_shader.wgsl"));
-        let flower_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Flower Render Pipeline"),
-            layout: Some(&flower_pipeline_layout),
+        let sprite_shader = device.create_shader_module(wgpu::include_wgsl!("flower_shader.wgsl"));
+        let sprite_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Sprite Render Pipeline"),
+            layout: Some(&sprite_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &flower_shader,
+                module: &sprite_shader,
                 entry_point: Some("vs_main"),
                 buffers: &[Vertex::buffer_layout()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                module: &flower_shader,
+                module: &sprite_shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
@@ -408,7 +429,7 @@ impl RenderState<'_> {
             config,
             timestamp_query_state,
             voxel_render_pipeline,
-            flower_render_pipeline,
+            sprite_render_pipeline,
             depth_texture,
             camera_uniform,
             camera_buffer,
@@ -420,6 +441,8 @@ impl RenderState<'_> {
             voxel_texture_bind_group,
             flower_texture,
             flower_texture_bind_group,
+            sun_texture,
+            sun_texture_bind_group,
             font,
             text_brush,
             text_section,
@@ -432,7 +455,7 @@ impl RenderState<'_> {
         self.text_brush.queue(&self.device, &self.queue, [&self.text_section]).unwrap();
     }
 
-    fn render(&mut self, voxel_vertices: &Vec<Vertex>, flower_vertices: &Vec<Vertex>) -> Result<(), wgpu::SurfaceError> {
+    fn render(&mut self, voxel_vertices: &Vec<Vertex>, flower_vertices: &Vec<Vertex>, sun_vertices: &Vec<Vertex>) -> Result<(), wgpu::SurfaceError> {
         let voxel_vertex_buffer = self.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Voxel Vertex Buffer"),
@@ -444,6 +467,13 @@ impl RenderState<'_> {
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Flower Vertex Buffer"),
                 contents: bytemuck::cast_slice(&flower_vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+        let sun_vertex_buffer = self.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Sun Vertex Buffer"),
+                contents: bytemuck::cast_slice(&sun_vertices),
                 usage: wgpu::BufferUsages::VERTEX,
             });
 
@@ -493,14 +523,20 @@ impl RenderState<'_> {
             let n_vertices = voxel_vertices.len() as u32;
             render_pass.draw(0..n_vertices, 0..1);
 
-            // Render flowers
+            // Render sprites
+            render_pass.set_pipeline(&self.sprite_render_pipeline);
+
+            // Sun
+            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.sun_texture_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, sun_vertex_buffer.slice(..));
+            render_pass.draw(0..sun_vertices.len() as u32, 0..1);
+
+            // Flowers
             if flower_vertices.len() > 0 {
-                render_pass.set_pipeline(&self.flower_render_pipeline);
-                render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
                 render_pass.set_bind_group(1, &self.flower_texture_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, flower_vertex_buffer.slice(..));
-                let n_vertices = flower_vertices.len() as u32;
-                render_pass.draw(0..n_vertices, 0..1);
+                render_pass.draw(0..flower_vertices.len() as u32, 0..1);
             }
 
             self.text_brush.draw(&mut render_pass);
@@ -664,7 +700,8 @@ impl<'a> App<'a> {
     fn render(&mut self) {
         let voxel_vertices = self.game_state.get_voxel_vertices();
         let flower_vertices = self.game_state.get_flower_vertices();
-        self.render_state_mut().render(&voxel_vertices, &flower_vertices).unwrap();
+        let sun_vertices = self.game_state.get_sun_vertices();
+        self.render_state_mut().render(&voxel_vertices, &flower_vertices, &sun_vertices).unwrap();
     }
 }
 
