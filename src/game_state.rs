@@ -1,5 +1,3 @@
-use std::f32::consts::PI;
-
 use cgmath::{InnerSpace, Point3, point3, Vector2, vec2, Vector3, vec3};
 use winit::keyboard::KeyCode;
 
@@ -8,12 +6,14 @@ use crate::ecosim::{EcosimEntity, ecosim_tick};
 use crate::fixed_point::Fixed;
 use crate::render_util::Vertex;
 use crate::physics_world::{PhysicsBody, PhysicsConfig, physics_tick};
-use crate::voxel::{CHUNK_SIZE, VoxelChunk, VOXEL_SCALE};
+use crate::voxel::{CHUNK_SIZE, VoxelChunk, VOXEL_SCALE, VOXEL_SIZE};
 use crate::window::InputState;
 
 const PHYSICS_SECONDS_PER_TICK: f64 = 1.0 / 60.0;
 
 const ECOSIM_SECONDS_PER_TICK: f64 = 1.0 / 4.0;
+
+const SUN_DISTANCE: f32 = 100.0;
 
 struct FirstPersonCameraController {
     pitch: f32,
@@ -95,8 +95,7 @@ fn calc_normal(p0: [f32; 3], p1: [f32; 3], p2: [f32; 3]) -> [f32; 3] {
 }
 
 // Function written by Claude, cleaned up by me
-fn create_pyramid_mesh(offset: Point3<f32>, base_size: f32, height: f32) -> Vec<Vertex> {
-    const YELLOW: [f32; 3] = [1.0, 1.0, 0.0];
+fn create_pyramid_mesh(offset: Point3<f32>, base_size: f32, height: f32, color: [f32; 3]) -> Vec<Vertex> {
     let half_base = base_size / 2.0;
 
     // Define the 5 vertex positions
@@ -111,36 +110,36 @@ fn create_pyramid_mesh(offset: Point3<f32>, base_size: f32, height: f32) -> Vec<
 
     // Front face
     let front_normal = calc_normal(base_v0_pos, apex_pos, base_v1_pos);
-    let front_v0 = Vertex { position: base_v0_pos, light: YELLOW, uv: [0.0, 0.0], normal: front_normal };
-    let front_apex = Vertex { position: apex_pos, light: YELLOW, uv: [0.5, 0.5], normal: front_normal };
-    let front_v1 = Vertex { position: base_v1_pos, light: YELLOW, uv: [1.0, 0.0], normal: front_normal };
+    let front_v0 = Vertex { position: base_v0_pos, light: color, uv: [0.0, 0.0], normal: front_normal };
+    let front_apex = Vertex { position: apex_pos, light: color, uv: [0.5, 0.5], normal: front_normal };
+    let front_v1 = Vertex { position: base_v1_pos, light: color, uv: [1.0, 0.0], normal: front_normal };
 
     // Right face
     let right_normal = calc_normal(base_v1_pos, apex_pos, base_v2_pos);
-    let right_v1 = Vertex { position: base_v1_pos, light: YELLOW, uv: [0.0, 0.0], normal: right_normal };
-    let right_apex = Vertex { position: apex_pos, light: YELLOW, uv: [0.5, 0.5], normal: right_normal };
-    let right_v2 = Vertex { position: base_v2_pos, light: YELLOW, uv: [1.0, 0.0], normal: right_normal };
+    let right_v1 = Vertex { position: base_v1_pos, light: color, uv: [0.0, 0.0], normal: right_normal };
+    let right_apex = Vertex { position: apex_pos, light: color, uv: [0.5, 0.5], normal: right_normal };
+    let right_v2 = Vertex { position: base_v2_pos, light: color, uv: [1.0, 0.0], normal: right_normal };
 
     // Back face
     let back_normal = calc_normal(base_v2_pos, apex_pos, base_v3_pos);
-    let back_v2 = Vertex { position: base_v2_pos, light: YELLOW, uv: [0.0, 0.0], normal: back_normal };
-    let back_apex = Vertex { position: apex_pos, light: YELLOW, uv: [0.5, 0.5], normal: back_normal };
-    let back_v3 = Vertex { position: base_v3_pos, light: YELLOW, uv: [1.0, 0.0], normal: back_normal };
+    let back_v2 = Vertex { position: base_v2_pos, light: color, uv: [0.0, 0.0], normal: back_normal };
+    let back_apex = Vertex { position: apex_pos, light: color, uv: [0.5, 0.5], normal: back_normal };
+    let back_v3 = Vertex { position: base_v3_pos, light: color, uv: [1.0, 0.0], normal: back_normal };
 
     // Left face
     let left_normal = calc_normal(base_v3_pos, apex_pos, base_v0_pos);
-    let left_v3 = Vertex { position: base_v3_pos, light: YELLOW, uv: [0.0, 0.0], normal: left_normal };
-    let left_apex = Vertex { position: apex_pos, light: YELLOW, uv: [0.5, 0.5], normal: left_normal };
-    let left_v0 = Vertex { position: base_v0_pos, light: YELLOW, uv: [1.0, 0.0], normal: left_normal };
+    let left_v3 = Vertex { position: base_v3_pos, light: color, uv: [0.0, 0.0], normal: left_normal };
+    let left_apex = Vertex { position: apex_pos, light: color, uv: [0.5, 0.5], normal: left_normal };
+    let left_v0 = Vertex { position: base_v0_pos, light: color, uv: [1.0, 0.0], normal: left_normal };
 
     // Base (two triangles) - normal points downward
     let base_normal = calc_normal(base_v0_pos, base_v1_pos, base_v2_pos);
-    let base1_v0 = Vertex { position: base_v0_pos, light: YELLOW, uv: [0.0, 0.0], normal: base_normal };
-    let base1_v1 = Vertex { position: base_v1_pos, light: YELLOW, uv: [1.0, 0.0], normal: base_normal };
-    let base1_v2 = Vertex { position: base_v2_pos, light: YELLOW, uv: [1.0, 1.0], normal: base_normal };
-    let base2_v0 = Vertex { position: base_v0_pos, light: YELLOW, uv: [0.0, 0.0], normal: base_normal };
-    let base2_v2 = Vertex { position: base_v2_pos, light: YELLOW, uv: [1.0, 1.0], normal: base_normal };
-    let base2_v3 = Vertex { position: base_v3_pos, light: YELLOW, uv: [0.0, 1.0], normal: base_normal };
+    let base1_v0 = Vertex { position: base_v0_pos, light: color, uv: [0.0, 0.0], normal: base_normal };
+    let base1_v1 = Vertex { position: base_v1_pos, light: color, uv: [1.0, 0.0], normal: base_normal };
+    let base1_v2 = Vertex { position: base_v2_pos, light: color, uv: [1.0, 1.0], normal: base_normal };
+    let base2_v0 = Vertex { position: base_v0_pos, light: color, uv: [0.0, 0.0], normal: base_normal };
+    let base2_v2 = Vertex { position: base_v2_pos, light: color, uv: [1.0, 1.0], normal: base_normal };
+    let base2_v3 = Vertex { position: base_v3_pos, light: color, uv: [0.0, 1.0], normal: base_normal };
 
     vec![
         // Front face
@@ -207,6 +206,7 @@ pub struct GameState {
     pub player: PlayerActor,
     ecosim_tick_accumulator: f64,
     pub ecosim_entities: Vec<EcosimEntity>,
+    pub sun_time: f64,
     pub sun_position: Vector3<f32>,
 }
 
@@ -235,7 +235,8 @@ impl GameState {
             player,
             ecosim_tick_accumulator: 0.0,
             ecosim_entities: vec![],
-            sun_position: vec3(0.0, -(PI / 8.0).sin(), (PI / 8.0).cos()),
+            sun_time: 0.0,
+            sun_position: vec3(0.0, 1.0, 0.0),
         }
     }
 
@@ -292,11 +293,32 @@ impl GameState {
         };
     }
 
+    // Casts a ray from the voxel to the sun. Returns light intensity.
+    fn light_raycast(&self, voxel_coord: Vector3<usize>) -> f32 {
+        let voxel_center = vec3(
+            voxel_coord.x as f32 * VOXEL_SIZE.x + VOXEL_SIZE.x / 2.0,
+            voxel_coord.y as f32 * VOXEL_SIZE.y + VOXEL_SIZE.y / 2.0,
+            voxel_coord.z as f32 * VOXEL_SIZE.z + VOXEL_SIZE.z / 2.0);
+        let sun_direction = (-self.sun_position).normalize();
+        let relative_sun_position = voxel_center + sun_direction * SUN_DISTANCE;
+        let raycast_result = self.chunk.raycast(voxel_center, relative_sun_position);
+        match raycast_result {
+            Some(_distance) => 0.0,
+            None => 1.0,
+        }
+    }
+
     fn calculate_light(&mut self) {
         for i in 0..CHUNK_SIZE.x {
             for j in 0..CHUNK_SIZE.y {
                 for k in 0..CHUNK_SIZE.z {
-                    self.chunk.set_voxel_light(vec3(i, j, k), [i as f32 / CHUNK_SIZE.x as f32, k as f32 / CHUNK_SIZE.z as f32, 1.0]);
+                    if self.chunk.get_voxel(vec3(i, j, k)) == 0 {
+                        continue;
+                    }
+                    let k_t = k as f32 / CHUNK_SIZE.z as f32;
+                    let light_intensity = self.light_raycast(vec3(i, j, k));
+                    let light = [k_t * light_intensity, k_t * light_intensity, 1.0 * light_intensity];
+                    self.chunk.set_voxel_light(vec3(i, j, k), light);
                 }
             }
         }
@@ -390,6 +412,8 @@ impl GameState {
             self.camera.position = self.orbit_camera_controller.get_camera_position(&self.camera.target);
         }
 
+        self.sun_time += 0.2 * dt;
+        self.sun_position = vec3(0.0, -self.sun_time.sin() as f32, self.sun_time.cos() as f32);
         self.calculate_light();
     }
 
@@ -399,20 +423,31 @@ impl GameState {
         vertices.append(&mut create_pyramid_mesh(
                 self.player.get_center_base_f32(),
                 self.player.body.collision_size.x.to_f32() * VOXEL_SCALE,
-                self.player.body.collision_size.y.to_f32() * VOXEL_SCALE));
+                self.player.body.collision_size.y.to_f32() * VOXEL_SCALE,
+                [1.0, 1.0, 0.0]));
+        vertices.append(&mut self.get_raycast_debug_vertices());
         vertices
+    }
+
+    fn get_raycast_debug_vertices(&self) -> Vec<Vertex> {
+        let ray_origin = vec3(self.camera.position.x, self.camera.position.y, self.camera.position.z);
+        let ray_direction = (self.camera.target - self.camera.position).normalize();
+        let Some(t) = self.chunk.raycast(ray_origin, ray_direction) else {
+            return vec![];
+        };
+        let hit = self.camera.position + ray_direction * t;
+        create_pyramid_mesh(hit, 0.15, 0.15, [1.0, 0.0, 1.0])
     }
 
     pub fn get_sun_vertices(&self) -> Vec<Vertex> {
         const SUN_QUAD_SIZE: f32 = 25.0;
-        const SUN_DISTANCE: f32 = 100.0;
 
-        let sun_dir = (-self.sun_position).normalize();
-        let center = self.camera.position + sun_dir * SUN_DISTANCE;
+        let sun_direction = (-self.sun_position).normalize();
+        let center = self.camera.position + sun_direction * SUN_DISTANCE;
 
         let world_up = vec3(0.0, 1.0, 0.0);
-        let right = world_up.cross(sun_dir).normalize() * (SUN_QUAD_SIZE / 2.0);
-        let up = sun_dir.cross(right.normalize()).normalize() * (SUN_QUAD_SIZE / 2.0);
+        let right = world_up.cross(sun_direction).normalize() * (SUN_QUAD_SIZE / 2.0);
+        let up = sun_direction.cross(right.normalize()).normalize() * (SUN_QUAD_SIZE / 2.0);
 
         // Always upright version
         //let forward = (self.camera.target - self.camera.position).normalize();
@@ -424,7 +459,7 @@ impl GameState {
         let tl = point3_to_array(center - right + up);
         let tr = point3_to_array(center + right + up);
 
-        let normal = vector3_to_array(sun_dir);
+        let normal = vector3_to_array(sun_direction);
 
         vec![
             Vertex { position: bl, light: [0.0, 0.0, 0.0], uv: [0.0, 1.0], normal },
