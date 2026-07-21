@@ -293,15 +293,19 @@ impl GameState {
         };
     }
 
-    // Casts a ray from the voxel to the sun. Returns light intensity.
-    fn light_raycast(&self, voxel_coord: Vector3<usize>) -> f32 {
+    // Casts a ray from a voxel face toward the sun. Returns light intensity.
+    fn light_raycast(&self, voxel_coord: Vector3<usize>, face_normal: Vector3<f32>) -> f32 {
+        // Start the ray just outside the face so it doesn't immediately hit
+        // the originating voxel or its solid neighbors below the face plane.
+        const FACE_OFFSET: f32 = 0.001;
         let voxel_center = vec3(
             voxel_coord.x as f32 * VOXEL_SIZE.x + VOXEL_SIZE.x / 2.0,
             voxel_coord.y as f32 * VOXEL_SIZE.y + VOXEL_SIZE.y / 2.0,
             voxel_coord.z as f32 * VOXEL_SIZE.z + VOXEL_SIZE.z / 2.0);
+        let face_origin = voxel_center + face_normal * (VOXEL_SCALE / 2.0 + FACE_OFFSET);
         let sun_direction = (-self.sun_position).normalize();
-        let relative_sun_position = voxel_center + sun_direction * SUN_DISTANCE;
-        let raycast_result = self.chunk.raycast(voxel_center, relative_sun_position);
+        let relative_sun_position = face_origin + sun_direction * SUN_DISTANCE;
+        let raycast_result = self.chunk.raycast(face_origin, relative_sun_position);
         match raycast_result {
             Some(_distance) => 0.0,
             None => 1.0,
@@ -309,16 +313,32 @@ impl GameState {
     }
 
     fn calculate_light(&mut self) {
+        const FACE_NORMALS: [Vector3<f32>; 6] = [
+            vec3(1.0, 0.0, 0.0),
+            vec3(-1.0, 0.0, 0.0),
+            vec3(0.0, 1.0, 0.0),
+            vec3(0.0, -1.0, 0.0),
+            vec3(0.0, 0.0, 1.0),
+            vec3(0.0, 0.0, -1.0),
+        ];
         for i in 0..CHUNK_SIZE.x {
             for j in 0..CHUNK_SIZE.y {
                 for k in 0..CHUNK_SIZE.z {
-                    if self.chunk.get_voxel(vec3(i, j, k)) == 0 {
+                    let coord = vec3(i, j, k);
+                    if self.chunk.get_voxel(coord) == 0 {
                         continue;
                     }
+                    let coord_i32 = vec3(i as i32, j as i32, k as i32);
                     let k_t = k as f32 / CHUNK_SIZE.z as f32;
-                    let light_intensity = self.light_raycast(vec3(i, j, k));
-                    let light = [k_t * light_intensity, k_t * light_intensity, 1.0 * light_intensity];
-                    self.chunk.set_voxel_light(vec3(i, j, k), light);
+                    for face_normal in FACE_NORMALS.iter() {
+                        let face_dir_i32 = vec3(face_normal.x as i32, face_normal.y as i32, face_normal.z as i32);
+                        if !self.chunk.is_face_visible(coord_i32, face_dir_i32) {
+                            continue;
+                        }
+                        let light_intensity = self.light_raycast(coord, *face_normal);
+                        let light = [k_t * light_intensity, k_t * light_intensity, 1.0 * light_intensity];
+                        self.chunk.set_voxel_face_light(coord, [face_normal.x, face_normal.y, face_normal.z], light);
+                    }
                 }
             }
         }

@@ -152,7 +152,7 @@ impl VoxelChunk {
         self.geometry_dirty = true;
     }
 
-    fn is_face_visible(&self, voxel_position: Vector3<i32>, face_direction: Vector3<i32>) -> bool {
+    pub fn is_face_visible(&self, voxel_position: Vector3<i32>, face_direction: Vector3<i32>) -> bool {
         let adjacent_position = voxel_position + face_direction;
         if self.voxels.is_i32_out_of_bounds(adjacent_position) {
             return true;
@@ -189,9 +189,11 @@ impl VoxelChunk {
         self.geometry_dirty = false;
     }
 
-    pub fn set_voxel_light(&mut self, coord: Vector3<usize>, light: [f32; 3]) {
+    pub fn set_voxel_face_light(&mut self, coord: Vector3<usize>, face_normal: [f32; 3], light: [f32; 3]) {
         for vert in self.per_voxel_vertices.get_mut(coord) {
-            vert.light = light;
+            if vert.normal == face_normal {
+                vert.light = light;
+            }
         }
     }
 
