@@ -124,6 +124,12 @@ pub struct VoxelChunk {
     voxels: Array3D<VoxelType>,
     per_voxel_vertices: Array3D<Vec<Vertex>>,
     geometry_dirty: bool,
+    // Highest y that contains a solid voxel (-1 when the chunk is empty). Shadow
+    // rays climbing above this plane can never hit anything, so raycast stops
+    // early instead of stepping all the way to the grid ceiling. Grows on
+    // set_voxel and is never lowered; a stale-high value stays correct, just
+    // slightly less aggressive.
+    max_solid_y: i32,
 }
 
 impl VoxelChunk {
@@ -132,6 +138,7 @@ impl VoxelChunk {
             voxels: Array3D::new(CHUNK_SIZE),
             per_voxel_vertices: Array3D::new(CHUNK_SIZE),
             geometry_dirty: true,
+            max_solid_y: -1,
         }
     }
 
@@ -149,6 +156,9 @@ impl VoxelChunk {
 
     pub fn set_voxel(&mut self, coord: Vector3<usize>, value: VoxelType) {
         self.voxels.set(coord, value);
+        if value != 0 {
+            self.max_solid_y = self.max_solid_y.max(coord.y as i32);
+        }
         self.geometry_dirty = true;
     }
 
@@ -251,14 +261,24 @@ impl VoxelChunk {
         let step: Vector3<f32> = vec3(ray_direction.x.signum(), ray_direction.y.signum(), ray_direction.z.signum());
         let delta: Vector3<f32> = vec_abs(1.0 / ray_direction);
 
+        // Clamp to the last valid cell index (CHUNK_SIZE - 1). A ray entering the
+        // grid right at a max boundary plane can floor to CHUNK_SIZE, which would
+        // index out of bounds on the first voxel lookup below.
         let position_f32: Vector3<f32> = vec_min(vec_max(
             vec_floor(entry_position),
-            vec3(0.0, 0.0, 0.0)), vec3(CHUNK_SIZE.x as f32, CHUNK_SIZE.y as f32, CHUNK_SIZE.z as f32));
+            vec3(0.0, 0.0, 0.0)), vec3((CHUNK_SIZE.x - 1) as f32, (CHUNK_SIZE.y - 1) as f32, (CHUNK_SIZE.z - 1) as f32));
         let mut t_max: Vector3<f32> = (position_f32 - entry_position + vec_max(step, vec3(0.0, 0.0, 0.0))).div_element_wise(ray_direction);
         let mut last_axis = 0;
         let mut position = vec3(position_f32.x as i32, position_f32.y as i32, position_f32.z as i32);
 
+        // A ray that isn't descending can never hit anything once it rises above
+        // the tallest solid voxel, so we can stop the moment it does.
+        let going_up = ray_direction.y >= 0.0;
+
         for i in 0..MAX_STEPS {
+            if going_up && position.y > self.max_solid_y {
+                break;
+            }
             let voxel = self.get_voxel_i32(position);
             if voxel != 0 && !(i == 0 && origin_inside_grid) {
                 // Hit
@@ -304,5 +324,31 @@ impl VoxelChunk {
         }
 
         return None;  // Miss
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A ray that starts outside a boundary face and grazes into the grid right
+    // at the far boundary plane used to floor its starting DDA cell to
+    // CHUNK_SIZE (one past the last valid index), panicking on the first voxel
+    // lookup. Shadow rays cast from the outward faces of edge voxels do exactly
+    // this, so lighting would crash after the sun had moved a bit.
+    #[test]
+    fn raycast_grazing_boundary_entry_does_not_panic() {
+        let mut chunk = VoxelChunk::new();
+        // A tall voxel off the ray's path keeps max_solid_y high so the upward
+        // early-out doesn't fire before the first lookup, which is what actually
+        // exercises the initial-cell clamp this test guards.
+        chunk.set_voxel(vec3(0, 31, 0), 1);
+        // Enters the +x face while grazing the max-z boundary plane, so the entry
+        // point's z floors to CHUNK_SIZE (one past the last valid index).
+        let origin = vec3(20.0, 8.0, 15.98);
+        let direction = vec3(-1.0, 0.00013, 0.005);
+        // The ray misses the lone voxel, so this should return None rather than
+        // indexing out of bounds on the first lookup.
+        assert_eq!(chunk.raycast(origin, direction), None);
     }
 }

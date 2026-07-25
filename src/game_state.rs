@@ -1,4 +1,5 @@
 use cgmath::{InnerSpace, Point3, point3, Vector2, vec2, Vector3, vec3};
+use rand::Rng;
 use winit::keyboard::KeyCode;
 
 use crate::camera::Camera;
@@ -14,6 +15,15 @@ const PHYSICS_SECONDS_PER_TICK: f64 = 1.0 / 60.0;
 const ECOSIM_SECONDS_PER_TICK: f64 = 1.0 / 4.0;
 
 const SUN_DISTANCE: f32 = 100.0;
+
+// Number of shadow rays cast per voxel face. Each ray aims at a different
+// random point across the sun's disk; the fraction that reach the sun becomes
+// the light intensity, which softens shadow edges into a penumbra.
+const SUN_LIGHT_SAMPLES: usize = 6;
+
+// Radius of the sun's disk (in world units, at SUN_DISTANCE) that shadow rays
+// are spread across. Larger values widen the penumbra / soften the shadows.
+const SUN_SAMPLE_RADIUS: f32 = 16.0;
 
 struct FirstPersonCameraController {
     pitch: f32,
@@ -208,6 +218,10 @@ pub struct GameState {
     pub ecosim_entities: Vec<EcosimEntity>,
     pub sun_time: f64,
     pub sun_position: Vector3<f32>,
+    // Fixed random offsets (in the sun's disk plane) used to aim shadow rays at
+    // several points across the sun. Chosen once so the soft shadows change
+    // smoothly as the sun moves rather than flickering frame to frame.
+    sun_sample_offsets: Vec<Vector2<f32>>,
 }
 
 impl GameState {
@@ -215,6 +229,13 @@ impl GameState {
         let mut player = PlayerActor::new();
         player.body.position = point3(Fixed::new(2, 0), Fixed::new(3, 0), Fixed::new(2, 0));
         player.body.collision_size = vec3(Fixed::new(0, 128), Fixed::new(2, 0), Fixed::new(0, 128));
+        // Distribute the shadow-ray sample points uniformly across the sun's disk.
+        let mut rng = rand::rng();
+        let sun_sample_offsets = (0..SUN_LIGHT_SAMPLES).map(|_| {
+            let radius = SUN_SAMPLE_RADIUS * rng.random::<f32>().sqrt();
+            let angle = std::f32::consts::TAU * rng.random::<f32>();
+            vec2(radius * angle.cos(), radius * angle.sin())
+        }).collect();
         GameState {
             exit: false,
             window_size: vec2(0, 0),
@@ -237,6 +258,7 @@ impl GameState {
             ecosim_entities: vec![],
             sun_time: 0.0,
             sun_position: vec3(0.0, 1.0, 0.0),
+            sun_sample_offsets,
         }
     }
 
@@ -293,8 +315,12 @@ impl GameState {
         };
     }
 
-    // Casts a ray from a voxel face toward the sun. Returns light intensity.
-    fn light_raycast(&self, voxel_coord: Vector3<usize>, face_normal: Vector3<f32>) -> f32 {
+    // Casts several rays from a voxel face toward random points across the sun's
+    // disk. Returns the fraction that reach the sun unobstructed, so faces on the
+    // shadow boundary come out partially lit (a soft penumbra) rather than fully
+    // lit or fully dark. `sample_directions` are the per-sample ray directions
+    // shared by every face this frame (see calculate_light).
+    fn light_raycast(&self, voxel_coord: Vector3<usize>, face_normal: Vector3<f32>, sample_directions: &[Vector3<f32>]) -> f32 {
         // Start the ray just outside the face so it doesn't immediately hit
         // the originating voxel or its solid neighbors below the face plane.
         const FACE_OFFSET: f32 = 0.001;
@@ -303,13 +329,10 @@ impl GameState {
             voxel_coord.y as f32 * VOXEL_SIZE.y + VOXEL_SIZE.y / 2.0,
             voxel_coord.z as f32 * VOXEL_SIZE.z + VOXEL_SIZE.z / 2.0);
         let face_origin = voxel_center + face_normal * (VOXEL_SCALE / 2.0 + FACE_OFFSET);
-        let sun_direction = (-self.sun_position).normalize();
-        let relative_sun_position = face_origin + sun_direction * SUN_DISTANCE;
-        let raycast_result = self.chunk.raycast(face_origin, relative_sun_position);
-        match raycast_result {
-            Some(_distance) => 0.0,
-            None => 1.0,
-        }
+        let lit_samples = sample_directions.iter()
+            .filter(|direction| self.chunk.raycast(face_origin, **direction).is_none())
+            .count();
+        lit_samples as f32 / sample_directions.len() as f32
     }
 
     fn calculate_light(&mut self) {
@@ -321,6 +344,21 @@ impl GameState {
             vec3(0.0, 0.0, 1.0),
             vec3(0.0, 0.0, -1.0),
         ];
+        // Build this frame's shadow-ray directions by spreading the fixed sample
+        // offsets across the sun's disk. The disk plane is rebuilt from the
+        // current sun direction each frame, so the sampling follows the sun and
+        // the soft shadows shift smoothly instead of flickering.
+        //
+        // The sun orbits in the y-z plane, so the world x-axis is always
+        // perpendicular to the sun direction. Using it as the cross reference
+        // keeps the disk basis continuous across the whole orbit (a world-up
+        // reference would spin unstably as the sun passes overhead/underfoot).
+        let sun_direction = (-self.sun_position).normalize();
+        let right = sun_direction.cross(vec3(1.0, 0.0, 0.0)).normalize();
+        let up = sun_direction.cross(right).normalize();
+        let sample_directions: Vec<Vector3<f32>> = self.sun_sample_offsets.iter()
+            .map(|offset| sun_direction * SUN_DISTANCE + right * offset.x + up * offset.y)
+            .collect();
         for i in 0..CHUNK_SIZE.x {
             for j in 0..CHUNK_SIZE.y {
                 for k in 0..CHUNK_SIZE.z {
@@ -335,7 +373,14 @@ impl GameState {
                         if !self.chunk.is_face_visible(coord_i32, face_dir_i32) {
                             continue;
                         }
-                        let light_intensity = self.light_raycast(coord, *face_normal);
+                        // A face angled away from the sun can never see it: a
+                        // shadow ray toward the sun would just curve back into
+                        // this voxel. Skip the raycasts and mark it fully shadowed.
+                        let light_intensity = if face_normal.dot(sun_direction) < 0.0 {
+                            0.0
+                        } else {
+                            self.light_raycast(coord, *face_normal, &sample_directions)
+                        };
                         let light = [k_t * light_intensity, k_t * light_intensity, 1.0 * light_intensity];
                         self.chunk.set_voxel_face_light(coord, [face_normal.x, face_normal.y, face_normal.z], light);
                     }
@@ -507,5 +552,74 @@ impl GameState {
             result.append(&mut get_entity_vertices(entity, camera_pos));
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Runs the lighting pass over a flat ground with a thin raised wall that
+    // casts a shadow, and returns the lit fraction of every ground top face.
+    // The blue channel of the stored light equals the raw lit fraction (see
+    // calculate_light), which is what soft shadows should turn fractional.
+    fn ground_top_face_intensities(sun_position: Vector3<f32>) -> Vec<f32> {
+        let mut state = GameState::new();
+        for x in 0..CHUNK_SIZE.x {
+            for z in 0..CHUNK_SIZE.z {
+                state.chunk.set_voxel(vec3(x, 0, z), 1);
+            }
+        }
+        // A wall running along x, so it casts a shadow that moves in z.
+        for x in 4..28 {
+            for y in 1..10 {
+                state.chunk.set_voxel(vec3(x, y, 12), 1);
+            }
+        }
+        // Build the geometry first so the lighting pass has vertices to write to.
+        let _ = state.chunk.get_vertices();
+        state.sun_position = sun_position;
+        state.calculate_light();
+
+        state.chunk.get_vertices().iter()
+            .filter(|v| v.normal == [0.0, 1.0, 0.0] && (v.position[1] - VOXEL_SIZE.y).abs() < 0.01)
+            .map(|v| v.light[2])
+            .collect()
+    }
+
+    // Shadows should have a soft penumbra: at the shadow boundary, some ground
+    // faces are only partially lit rather than every face being fully lit or
+    // fully dark (which is all the old single-ray-to-sun-center test produced).
+    #[test]
+    fn soft_shadows_have_a_penumbra() {
+        // Sun above the horizon, tilted along z so the wall casts a shadow.
+        let sun_position = vec3(0.0, -(0.6f32).sin(), (0.6f32).cos());
+        let intensities = ground_top_face_intensities(sun_position);
+
+        let fully_lit = intensities.iter().filter(|&&i| i > 0.99).count();
+        let fully_dark = intensities.iter().filter(|&&i| i < 0.01).count();
+        let penumbra = intensities.iter().filter(|&&i| i > 0.01 && i < 0.99).count();
+
+        assert!(fully_lit > 0, "expected some ground in full sunlight");
+        assert!(fully_dark > 0, "expected some ground in full shadow");
+        assert!(penumbra > 0, "expected a soft penumbra of partially-lit faces, got none");
+    }
+
+    // As the sun moves a small amount, a boundary face's lit fraction should
+    // change smoothly (through intermediate values) rather than snapping
+    // straight from lit to dark.
+    #[test]
+    fn shadow_edge_changes_smoothly() {
+        let mut saw_intermediate = false;
+        for step in 0..40 {
+            let t = 0.55 + step as f32 * 0.002;
+            let sun_position = vec3(0.0, -t.sin(), t.cos());
+            let intensities = ground_top_face_intensities(sun_position);
+            if intensities.iter().any(|&i| i > 0.2 && i < 0.8) {
+                saw_intermediate = true;
+                break;
+            }
+        }
+        assert!(saw_intermediate, "shadow edge never passed through intermediate light values");
     }
 }
