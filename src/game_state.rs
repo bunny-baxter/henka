@@ -16,14 +16,44 @@ const ECOSIM_SECONDS_PER_TICK: f64 = 1.0 / 4.0;
 
 const SUN_DISTANCE: f32 = 100.0;
 
+// The sun traces a figure-8 across the sky each cycle: the two lobes hang down
+// toward opposite horizons and the loop pinches (crosses over) overhead, near
+// the zenith (or tilted down toward a horizon, see SUN_LATITUDE_TILT). These
+// constants shape that path.
+
+// Elevation (radians above the horizon) that the tip of each lobe reaches, i.e.
+// how close the sun gets to the horizon at both ends of the 8. Smaller values
+// reach closer to the horizon and make the whole loop taller.
+const SUN_LOW_ELEVATION: f32 = 0.125;
+
+// How fat the two lobes are, as a fraction of their height (zenith to tip).
+// Larger values give wider, rounder loops; smaller values a narrower 8.
+const SUN_LOOP_ASPECT: f32 = 0.9;
+
+// Tilts the whole figure-8 down from straight overhead, so the pinch (the
+// sun's high crossover, i.e. "noon") sits partway down the sky toward one
+// horizon instead of at the zenith. 0.0 keeps noon directly overhead (like the
+// equator); larger values push it further down, as at higher latitudes. In
+// radians: the pinch ends up this far below the zenith.
+const SUN_LATITUDE_TILT: f32 = 0.20;
+
 // Number of shadow rays cast per voxel face. Each ray aims at a different
 // random point across the sun's disk; the fraction that reach the sun becomes
 // the light intensity, which softens shadow edges into a penumbra.
-const SUN_LIGHT_SAMPLES: usize = 6;
+const SUN_LIGHT_SAMPLES: usize = 7;
 
 // Radius of the sun's disk (in world units, at SUN_DISTANCE) that shadow rays
 // are spread across. Larger values widen the penumbra / soften the shadows.
-const SUN_SAMPLE_RADIUS: f32 = 16.0;
+const SUN_SAMPLE_RADIUS: f32 = 12.0;
+
+const SUN_SPEED: f64 = 0.25;
+
+// How evenly the sun travels its figure-8. A plain sinusoidal parameter makes
+// the sun dwell near the lobe tips (the horizons) and race through the zenith.
+// This dials that out: 0.0 keeps the raw, uneven motion; 1.0 makes the sun move
+// at a constant angular speed all the way around; values between ease the
+// lingering partway.
+const SUN_SPEED_EVENNESS: f64 = 0.35;
 
 struct FirstPersonCameraController {
     pitch: f32,
@@ -477,8 +507,50 @@ impl GameState {
             self.camera.position = self.orbit_camera_controller.get_camera_position(&self.camera.target);
         }
 
-        self.sun_time += 0.2 * dt;
-        self.sun_position = vec3(0.0, -self.sun_time.sin() as f32, self.sun_time.cos() as f32);
+        // Trace a figure-8 (a Gerono lemniscate) draped over the sky dome with
+        // its crossover at the zenith. We start at straight-up and tilt away
+        // from it by two rotations:
+        //   - `tilt` rides cos(t) and swings the sun front-to-back down toward
+        //     each horizon; at the extremes it reaches SUN_LOW_ELEVATION, and it
+        //     passes through zero (the zenith) twice per cycle.
+        //   - `fatten` rides sin(t)cos(t), bowing the path sideways so each pass
+        //     between horizon and zenith bulges out into a rounded lobe.
+        // Because `fatten` is zero whenever `tilt` is zero, both crossings land
+        // exactly on the zenith, giving the 8 its overhead pinch.
+        let t = self.sun_time;
+        let max_tilt = std::f32::consts::FRAC_PI_2 - SUN_LOW_ELEVATION;
+        let tilt = max_tilt * t.cos() as f32;
+        let fatten = max_tilt * SUN_LOOP_ASPECT * (t.sin() * t.cos()) as f32;
+        // Zenith (0, 1, 0) tilted by `tilt` toward ±z, then by `fatten` toward
+        // ±x.
+        let sun_direction = vec3(
+            -tilt.cos() * fatten.sin(),
+            tilt.cos() * fatten.cos(),
+            tilt.sin(),
+        );
+        // Tilt the whole 8 down from the zenith by SUN_LATITUDE_TILT, rotating
+        // about the z-axis (the rise/set line the lobes hang along). This slides
+        // the pinch toward the -x horizon, like noon culminating short of
+        // straight overhead away from the equator. A rigid rotation, so the
+        // constant-speed pacing computed below is unaffected.
+        let (sin_lat, cos_lat) = (SUN_LATITUDE_TILT.sin(), SUN_LATITUDE_TILT.cos());
+        let sun_direction = vec3(
+            sun_direction.x * cos_lat - sun_direction.y * sin_lat,
+            sun_direction.x * sin_lat + sun_direction.y * cos_lat,
+            sun_direction.z,
+        );
+        // sun_position is the opposite (the direction the sunlight travels).
+        self.sun_position = -sun_direction;
+
+        // Advance the parameter for next frame. `speed` is the sun's angular
+        // speed on the sphere, |d(sun_direction)/dt|; dividing the step by it
+        // cancels the sinusoidal dwell so the sun moves at a constant rate. The
+        // SUN_SPEED_EVENNESS exponent blends that against the raw motion: 0.0
+        // leaves the step untouched (speed^0 == 1), 1.0 divides it out fully.
+        let d_tilt = -max_tilt * t.sin() as f32;
+        let d_fatten = max_tilt * SUN_LOOP_ASPECT * (2.0 * t).cos() as f32;
+        let speed = (d_tilt * d_tilt + d_fatten * d_fatten * tilt.cos() * tilt.cos()).sqrt();
+        self.sun_time += SUN_SPEED * dt / (speed.max(1e-3) as f64).powf(SUN_SPEED_EVENNESS);
         self.calculate_light();
     }
 
